@@ -1,0 +1,15 @@
+# Ignorar carpetas de dependencias (¡son pesadísimas!)
+node_modules/
+bower_components/
+
+# Ignorar archivos de configuración local y contraseñas
+.env
+.env.local
+
+# Ignorar archivos del sistema operativo
+.DS_Store
+Thumbs.db
+
+# Ignorar carpetas de compilación o build
+dist/
+build/
