@@ -1,0 +1,24 @@
+sqlalchemy
+pandas 
+pip install python-multipart
+pip install fastapi uvicorn passlib[bcrypt] python-multipart jinja2
+
+SERVIDOR
+ uvicorn backend.main:app --host 0.0.0.0 --port 8010
+
+LOCAL LAPTOP
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
+ 
+
+tener en cuenta en el .env el puerto de mysql
+
+ Nginx
+ start nginx
+ 
+Reiniciar  : nginx -s reload
+
+Detener  :nginx -s stop
+
+Verificar si Nginx está corriendo : tasklist | findstr nginx
+
+nombre del servicio nssm: carga_masiva_uvicorn

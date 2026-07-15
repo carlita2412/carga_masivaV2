@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Gestión de Usuarios</h2>
+
+  <form method="get" class="row g-3">
+    <!-- País -->
+    <div class="col-md-3">
+      <label for="pais" class="form-label">País</label>
+      <select id="pais" name="pais" class="form-select" onchange="this.form.submit()">
+        <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+        <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+        <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
+      </select>
+    </div>
+
+    <!-- Organización -->
+    <div class="col-md-3">
+      <label for="organizacion" class="form-label">Organización</label>
+      <select id="organizacion" name="organizacion_id" class="form-select" onchange="this.form.submit()">
+        <option value="0">-- Seleccione --</option>
+        {% for org in organizaciones %}
+          <option value="{{ org.organizacion_id }}" {% if org.organizacion_id == organizacion_id %}selected{% endif %}>{{ org.organizacion_nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Búsqueda -->
+    <div class="col-md-4">
+      <label for="buscar" class="form-label">Buscar usuario</label>
+      <input type="text" id="buscar" name="buscar" value="{{ buscar }}" class="form-control" placeholder="Nombre, apellido o correo" onkeydown="if(event.key === 'Enter') this.form.submit()">
+    </div>
+  </form>
+
+  <!-- Tabla de usuarios -->
+  <div class="table-responsive mt-4">
+    <table class="table table-bordered table-striped">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Apellido</th>
+          <th>Correo</th>
+          <th>Organización</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in usuarios %}
+        <tr>
+          <td>{{ u.usuario_nombre }}</td>
+          <td>{{ u.usuario_apellido }}</td>
+          <td>{{ u.usuario_username }}</td>
+          <td>{{ u.organizacion_nombre }}</td>
+          <td>
+            <button class="btn btn-danger btn-sm"
+                    onclick="bloquearUsuario({{ u.usuario_id }}, '{{ pais }}')"
+                    title="Bloquear">
+              <i class="bi bi-person-fill-slash"></i>
+            </button>
+
+            <button class="btn btn-warning btn-sm" title="Cambiar Correo"
+                    onclick="mostrarCambioCorreo({{ u.usuario_id }}, '{{ pais }}')">
+              <i class="bi bi-envelope"></i>
+            </button>
+            <button class="btn btn-info btn-sm" title="Cambiar Contraseña"
+                    onclick="mostrarCambioClave({{ u.usuario_id }}, '{{ pais }}')">
+              <i class="bi bi-lock-fill"></i>
+            </button>
+
+          
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+function bloquearUsuario(usuarioId, pais) {
+  const formData = new FormData();
+  formData.append("accion", "bloquear");
+  formData.append("usuario_id", usuarioId);
+  formData.append("pais", pais);
+
+  fetch("/usuarios/v2/accion", {
+    method: "POST",
+    body: formData,
+    credentials: "include"
+  })
+  .then(response => {
+    if (response.redirected) {
+      // Mostrar modal antes de redirigir
+      const modalMessage = document.getElementById("modalMessage");
+      modalMessage.innerText = "Usuario bloqueado correctamente.";
+
+      const modalEl = document.getElementById("successModal");
+      const modal = new bootstrap.Modal(modalEl);
+      modal.show();
+
+      // Redirigir después de cerrar el modal
+      const aceptarBtn = modalEl.querySelector("button[data-bs-dismiss='modal']");
+      aceptarBtn.onclick = () => {
+        window.location.href = response.url;
+      };
+    }
+  })
+  .catch(err => {
+    console.error("Error:", err);
+    alert("Error al bloquear usuario");
+  });
+}
+</script>
+
+
+<script>
+let currentAction = "";
+let currentUserId = null;
+let currentPais = "";
+
+function mostrarCambioCorreo(usuarioId, pais) {
+  currentAction = "cambiar-correo";
+  currentUserId = usuarioId;
+  currentPais = pais;
+
+  document.getElementById("inputModalLabel").textContent = "Cambiar correo electrónico";
+  const input = document.getElementById("inputModalField");
+  input.placeholder = "nuevo@email.com";
+  input.type = "email";
+  input.value = "";
+
+  const modal = new bootstrap.Modal(document.getElementById("inputModal"));
+  modal.show();
+}
+
+function mostrarCambioClave(usuarioId, pais) {
+  currentAction = "cambiar-contrasena";
+  currentUserId = usuarioId;
+  currentPais = pais;
+
+  document.getElementById("inputModalLabel").textContent = "Cambiar contraseña";
+  const input = document.getElementById("inputModalField");
+  input.placeholder = "Nueva contraseña";
+  input.type = "password";
+  input.value = "";
+
+  const modal = new bootstrap.Modal(document.getElementById("inputModal"));
+  modal.show();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById("inputModalAceptar").addEventListener("click", () => {
+    const valor = document.getElementById("inputModalField").value;
+    if (!valor) {
+      alert("Debe ingresar un valor.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("accion", currentAction);
+    formData.append("usuario_id", currentUserId);
+    formData.append("pais", currentPais);
+    if (currentAction === "cambiar-correo") {
+      formData.append("nuevo_correo", valor);
+    } else if (currentAction === "cambiar-contrasena") {
+      formData.append("nueva_contrasena", valor);
+    }
+
+    fetch("/usuarios/v2/accion", {
+      method: "POST",
+      body: formData,
+      credentials: "include"
+    }).then(resp => {
+      if (resp.redirected) {
+        window.location.href = resp.url;
+      } else {
+        location.reload();
+      }
+    }).catch(() => {
+      alert("Error al ejecutar la acción.");
+    });
+
+    bootstrap.Modal.getInstance(document.getElementById("inputModal")).hide();
+  });
+});
+</script>
+
+
+{% endblock %}

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Digisalud</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <!-- Select2 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+  <!-- jQuery (requerido por Select2) -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- Select2 JS -->
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+  <style>
+   body {
+      overflow-x: hidden;
+      background-color: #f8f9fa;
+    }
+
+    #sidebar {
+      width: 250px;
+      background-color: #2D3748 !important;
+      color: white;
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      padding-top: 56px;
+      transition: transform 0.3s ease;
+    }
+
+    #sidebar.hidden {
+      transform: translateX(-100%);
+    }
+
+    #sidebar a {
+      display: block;
+      color: white;
+      padding: 12px 20px;
+      text-decoration: none;
+    }
+
+    #sidebar a:hover {
+      background-color: #70757b;
+    }
+
+    .topbar {
+      background: linear-gradient(to right, #f45d4c, #ffa736);
+      height: 56px;
+    }
+
+    .main-content {
+      margin-left: 250px;
+      padding: 70px 20px 20px;
+    }
+
+    .hamburger {
+      font-size: 24px;
+      background: none;
+      border: none;
+      color: white;
+    }
+
+    .logo {
+      height: 50px;
+    }
+
+    footer {
+      background-color: #2D3748;
+      color: white;
+    }
+
+    .digisalud-header {
+      background: linear-gradient(to right, #ff4e50, #f9d423);
+      color: white;
+      padding: 20px 0;
+      text-align: center;
+    }
+
+    .digisalud-logo {
+      font-size: 2rem;
+      font-weight: bold;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .fuente1 {
+      color: #ff4e50;
+    }
+    </style>
+</head>
+<body class="d-flex flex-column min-vh-100">
+
+   <header class="digisalud-header">
+      
+  <div class="container">
+    <nav class="navbar topbar fixed-top px-3 d-flex align-items-center">
+    <button class="hamburger me-3" onclick="toggleSidebar()">☰</button>
+    <div class="digisalud-logo">
+      
+      <span class="digisalud-icon"><img src="{{ request.url_for('static', path='img/digisalud.png') }}" alt="DIGISALUD" class="logo"></span> <!-- Puedes reemplazar por un SVG o ícono real -->
+    </div>
+  </nav>
+   
+  </div>
+</header>
+
+  <!-- Sidebar -->
+  <div id="sidebar" class="hidden">
+    <a href="/carga">Inicio</a>
+    <a href="/carga">Carga Masiva</a>
+    <!--<a href="#">Reportes</a>-->
+
+    <!--<a href="#">Configuración</a>-->
+       <!-- JRORNADAS (Desplegable) -->
+<!-- Jornadas (Desplegable) -->
+<a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuJornadas" role="button">
+  <i class="bi bi-calendar-event text-white"></i> Jornadas
+  <span class="ms-2">▼</span>
+</a>
+<div class="collapse ps-3" id="submenuJornadas">
+  <a href="/jornadas/v2">Gestionar Jornadas</a>
+</div>
+
+    <!-- Usuarios (Desplegable) -->
+ 
+<a  class="d-flex justify-content-between align-items-center"  href="/usuarios/v2" ><i class="bi bi-person-gear"></i>Gestionar Usuarios</a>
+  
+
+      <!-- DESCARGAS (Desplegable) -->
+  <a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuDescargas" role="button" aria-expanded="false" aria-controls="submenuDescargas">
+    <i class="bi bi-download"></i>  Descargas
+    <span class="ms-2">▼</span>
+  </a>
+  <div class="collapse ps-3" id="submenuDescargas">
+      <a href="/carga_masiva/descargas/beneficiario" download>Plantilla Beneficiario</a>
+      <a href="/carga_masiva/descargas/antropometria" download>Plantilla Antropometría</a>
+      <a href="/carga_masiva/descargas/sanguineo" download>Plantilla Sanguíneo</a>
+      <a href="/carga_masiva/descargas/manual" download>Manual de Usuario</a>
+  </div>
+     <a href="/logout"><i class="bi bi-power"></i> Cerrar sesión</a>
+  </div>
+
+  <!-- Main content -->
+  <div class="main-content" id="mainContent">
+    <div class="header mt-4">
+        <h4 class="fuente1">Bienvenid@, <strong>{{ usuario }}</strong></h4>
+        
+    </div>
+ 
+  <div class="card mt-4" style="border: 1px solid rgb(114, 112, 112); width: 80%;">
+        <div class="card-body">
+
+        <form id="uploadForm">
+          <!-- País -->
+          <div class="mb-3">
+            <label for="country" class="form-label">País</label>
+            <select class="form-select" id="country" name="country" required>
+              <option value="">-- Seleccionar --</option>
+              <option value="vzla">Venezuela</option>
+              <option value="colombia">Colombia</option>
+              <option value="elsalvador">El Salvador</option>
+            </select>
+          </div>
+
+          <!-- Actividad -->
+          <div class="mb-3">
+            <label for="actividad" class="form-label">Actividad</label>
+            <select class="form-select" id="actividad" name="actividad" required>
+              <option value="">-- Seleccionar --</option>
+              <option value="jornada">Jornada</option>
+              <option value="centro">Centro</option>
+            </select>
+          </div>
+
+        
+          <!-- Tipo de carga -->
+          <div class="mb-3">
+            <label for="dataType" class="form-label">Tipo de Carga</label>
+            <select class="form-select" id="dataType" name="dataType" required>
+              <option value="">-- Seleccionar --</option>
+              <option value="beneficiarios">Beneficiarios</option>
+              <option value="pesquisas">Pesquisas</option>
+            </select>
+          </div>
+          <!-- Destino (se inyecta dinámicamente) -->
+          <div class="mb-3" id="destinoContainer"></div>
+
+          <!-- Subtipo de pesquisa -->
+          <div class="mb-3" id="pesquisaTypeGroup" style="display: none;">
+            <label for="pesquisaType" class="form-label">Tipo de Pesquisa</label>
+            <select class="form-select" id="pesquisaType" name="pesquisaType">
+              <option value="">-- Seleccionar --</option>
+              <option value="antropometria">Antropometría</option>
+              <option value="sanguineo">Sanguíneo</option>
+            </select>
+          </div>
+
+          <!-- Archivo Excel -->
+          <div class="mb-3">
+            <label for="excelFile" class="form-label">Archivo Excel</label>
+            <input type="file" class="form-control" id="excelFile" name="file" accept=".xlsx,.xls" required>
+          </div>
+
+          <button type="submit" class="btn btn-primary">Cargar</button>
+        </form>
+
+        <div class="mt-3" id="feedback"></div>
+  </div>
+  </div>
+  </div>
+
+  <!-- Bootstrap Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Toggle Logic -->
+  <script>
+    function toggleSidebar() {
+      const sidebar = document.getElementById("sidebar");
+      const mainContent = document.getElementById("mainContent");
+
+      sidebar.classList.toggle("hidden");
+      mainContent.classList.toggle("expanded");
+    }
+  </script>
+<script>
+    if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
+    }
+
+    window.onpageshow = function(event) {
+        if (event.persisted || (window.performance && window.performance.navigation.type === 2)) {
+            window.location.reload();
+        }
+    };
+</script>
+ 
+
+  <script>
+    // Mostrar u ocultar subtipo si es pesquisa
+    document.getElementById('dataType').addEventListener('change', function () {
+      const group = document.getElementById('pesquisaTypeGroup');
+      group.style.display = (this.value === 'pesquisas') ? 'block' : 'none';
+    });
+
+    // Cargar destinos según actividad
+    const actividadSelect = document.getElementById('actividad');
+    const paisSelect = document.getElementById('country');
+
+    actividadSelect.addEventListener('change', async () => {
+      const pais = paisSelect.value;
+      const actividad = actividadSelect.value;
+
+      if (pais && actividad) {
+        const response = await fetch(`/api/opciones?pais=${pais}&actividad=${actividad}`);
+        const data = await response.json();
+
+        let html = `<label for="busqueda-select" class="form-label">Selecciona ${actividad}</label>`;
+        html += `<select class="form-select" id="destinoSelect" name="destino" required >`;
+        html += `<option value="">-- Seleccionar --</option>`;
+
+        data.forEach(item => {
+          html += `<option value="${item.id}" data-tokens="${item.nombre}">ID:${item.id} - ${item.nombre} (Inst: ${item.institucion_id})</option>`;
+        });
+
+        html += `</select>`;
+        document.getElementById('destinoContainer').innerHTML = html;
+          // Activar Select2 después de insertar el select
+        $('#destinoSelect').select2({
+          placeholder: "-- Seleccionar --",
+          allowClear: true,
+          width: '100%'
+        });
+      }
+    });
+  
+  </script>
+
+  <script>
+    document.getElementById('uploadForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const feedback = document.getElementById('feedback');
+      feedback.innerHTML = '<div class="alert alert-info">Procesando...</div>';
+
+      const formData = new FormData();
+      const pais = document.getElementById('country').value;
+      const actividad = document.getElementById('actividad').value;
+      const tipoCarga = document.getElementById('dataType').value;
+      const pesquisaType = document.getElementById('pesquisaType').value;
+      const destinoSelect = document.getElementById('destinoSelect');
+      const destinoId = destinoSelect ? destinoSelect.value : null;
+      const institucionId = destinoSelect ? destinoSelect.options[destinoSelect.selectedIndex].text.match(/Inst: (\d+)/)?.[1] : null;
+      const fileInput = document.getElementById('excelFile');
+
+      if (!destinoId || !institucionId) {
+        feedback.innerHTML = '<div class="alert alert-danger">Debe seleccionar un destino válido.</div>';
+        return;
+      }
+
+      formData.append('file', fileInput.files[0]);
+      formData.append('pais', pais);
+      formData.append('actividad', actividad);
+      formData.append('destino_id', destinoId);
+      formData.append('institucion_id', institucionId);
+
+      let endpoint = "";
+
+      if (tipoCarga === "beneficiarios") {
+        endpoint = "/api/cargar_excel";
+      } else if (tipoCarga === "pesquisas") {
+        if (pesquisaType === "antropometria") {
+          endpoint = "/api/cargar_excel_pesquisa_antropometrica";
+        } else if (pesquisaType === "sanguineo") {
+          endpoint = "/api/cargar_excel_pesquisa_sanguineo";  // futuro
+        } else {
+          feedback.innerHTML = '<div class="alert alert-danger">Debe seleccionar el tipo de pesquisa.</div>';
+          return;
+        }
+      } else {
+        feedback.innerHTML = '<div class="alert alert-danger">Debe seleccionar el tipo de carga.</div>';
+        return;
+      }
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'ok') {
+          let html = `<div class="alert alert-success"><strong>Carga exitosa.</strong><br>`;
+
+          if (tipoCarga === "beneficiarios") {
+            html += `Personas: ${result.insertados.personas_nuevas}<br>
+                     Pacientes: ${result.insertados.pacientes_asociados }<br>
+                     Escolaridades: ${result.insertados.escolaridades}<br>
+                     Autorizaciones: ${result.insertados.autorizaciones}<br>
+                     Familiares: ${result.insertados.familiares}`;
+          } else {
+            html += `Registros de pesquisas insertados: ${result.insertados}`;
+          }
+
+          html += `</div>`;
+
+          if (result.errores && result.errores.length > 0) {
+            html += `<div class="alert alert-warning"><strong>Advertencias:</strong><ul>`;
+            result.errores.forEach(item => {
+              html += `<li>${item}</li>`;
+            });
+            html += `</ul></div>`;
+          }
+
+          feedback.innerHTML = html;
+        } else {
+          feedback.innerHTML = `<div class="alert alert-danger">Error: ${result.mensaje}</div>`;
+        }
+      } catch (error) {
+        feedback.innerHTML = `<div class="alert alert-danger">Error inesperado: ${error.message}</div>`;
+      }
+    });
+  </script>
+    <footer class="text-white text-center py-3 mt-auto">
+      © Copyright 2025. Derechos reservados.
+    </footer>
+</body>
+</html>

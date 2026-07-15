@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Gestión de Jornadas</h2>
+
+  <form method="get" class="row g-3">
+    <!-- País -->
+    <div class="col-md-3">
+      <label for="pais" class="form-label">País</label>
+      <select id="pais" name="pais" class="form-select" onchange="this.form.submit()">
+        <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+        <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+        <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
+      </select>
+    </div>
+
+    <!-- Búsqueda -->
+    <div class="col-md-5">
+      <label for="buscar" class="form-label">Buscar jornada</label>
+      <input type="text" id="buscar" name="buscar" value="{{ buscar }}" class="form-control" placeholder="Nombre de jornada" onkeydown="if(event.key === 'Enter') this.form.submit()">
+    </div>
+  </form>
+
+  <!-- Tabla de jornadas -->
+  <div class="table-responsive mt-4">
+    <table class="table table-bordered table-striped">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Fecha inicio</th>
+          <th>Estatus</th>
+          <th>Acción</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for j in jornadas %}
+        <tr> 
+          <td>{{ j.jornada_id }}</td>
+          <td>{{ j.jornada_nombre }}</td>
+          <td>{{ j.jornada_fecha_inicio }}</td>
+          <td>{{ j.jornada_status_str }}</td>
+          <td>
+            <button class="btn btn-warning btn-sm" onclick="editarNombre({{ j.jornada_id }}, '{{ pais }}', '{{ j.jornada_nombre }}')" title="Editar nombre">
+              <i class="bi bi-pencil-square"></i>
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="cambiarStatus({{ j.jornada_id }}, '{{ pais }}', {{ j.jornada_status }})" title="Cambiar estatus">
+              <i class="bi bi-arrow-repeat"></i>
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Modal reutilizable -->
+<div class="modal fade" id="jornadaModal" tabindex="-1" aria-labelledby="jornadaModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="jornadaModalLabel">Actualizar</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <input type="text" id="modalInputField" class="form-control" placeholder="" />
+        <select id="modalStatusSelect" class="form-select d-none mt-2">
+          <option value="0">Pendiente</option>
+          <option value="1">Suspendida</option>
+          <option value="2">En Marcha</option>
+          <option value="3">Finalizada</option>
+          <option value="4">Cancelada</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="jornadaModalAceptar">Aceptar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let accion = "";
+let jornadaId = null;
+let pais = "";
+
+function editarNombre(id, p, nombre) {
+  accion = "editar-nombre";
+  jornadaId = id;
+  pais = p;
+  document.getElementById("modalInputField").value = nombre;
+  document.getElementById("modalInputField").classList.remove("d-none");
+  document.getElementById("modalStatusSelect").classList.add("d-none");
+
+  document.getElementById("jornadaModalLabel").textContent = "Editar nombre de jornada";
+  new bootstrap.Modal(document.getElementById("jornadaModal")).show();
+}
+
+function cambiarStatus(id, p, actual) {
+  accion = "cambiar-status";
+  jornadaId = id;
+  pais = p;
+  document.getElementById("modalStatusSelect").value = actual;
+  document.getElementById("modalStatusSelect").classList.remove("d-none");
+  document.getElementById("modalInputField").classList.add("d-none");
+
+  document.getElementById("jornadaModalLabel").textContent = "Cambiar estatus de jornada";
+  new bootstrap.Modal(document.getElementById("jornadaModal")).show();
+}
+
+// Enviar acción
+window.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("jornadaModalAceptar").addEventListener("click", () => {
+    const formData = new FormData();
+    formData.append("accion", accion);
+    formData.append("jornada_id", jornadaId);
+    formData.append("pais", pais);
+
+    if (accion === "editar-nombre") {
+      formData.append("nuevo_nombre", document.getElementById("modalInputField").value);
+    } else if (accion === "cambiar-status") {
+      formData.append("nuevo_status", document.getElementById("modalStatusSelect").value);
+    }
+
+    fetch("/jornadas/v2/accion", {
+      method: "POST",
+      body: formData,
+      credentials: "include"
+    }).then(resp => {
+      if (resp.redirected) {
+        window.location.href = resp.url;
+      } else {
+        location.reload();
+      }
+    });
+
+    bootstrap.Modal.getInstance(document.getElementById("jornadaModal")).hide();
+  });
+});
+</script>
+{% endblock %}
