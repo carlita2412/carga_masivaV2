@@ -199,7 +199,8 @@ def procesar_excel(df, pais, actividad, destino_id, institucion_id, cursor):
             # BENEFICIARIO
             # ==================================================================
             nombre = str(row["Nombres"]).strip().upper()
-            apellido = str(row["Apellidos"]).strip().upper()
+            apellido = safe_val(row["Apellidos"])
+            apellido = apellido.upper() if apellido else None
             genero = str(row["Genero Beneficiario"]).strip().upper()
 
             fecha_nac = pd.to_datetime(

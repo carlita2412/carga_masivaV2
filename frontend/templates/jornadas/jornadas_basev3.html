@@ -1,81 +1,444 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container mt-4">
-  <h2>Gestión de Jornadas</h2>
+<style>
+  :root{
+    --ds-coral:#ff5c57;
+    --ds-orange:#f5a623;
+    --ds-dark:#2d3748;
+    --ds-text:#273142;
+    --ds-muted:#667085;
+    --ds-border:#e4e7ec;
+    --ds-bg:#f7f9fc;
+  }
 
-  <form method="get" class="row g-3">
-    <!-- País -->
-    <div class="col-md-3">
-      <label for="pais" class="form-label">País</label>
-      <select id="pais" name="pais" class="form-select" onchange="this.form.submit()">
-        <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
-        <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
-        <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
-      </select>
+  .toolbar-card,
+  .table-card{
+    background:#fff;
+    border:1px solid var(--ds-border);
+    border-radius:16px;
+    box-shadow:0 8px 25px rgba(16,24,40,.05);
+  }
+
+  .toolbar-card{
+    padding:20px;
+    margin-top:24px;
+  }
+
+  .form-label{
+    font-size:.86rem;
+    font-weight:700;
+    color:#344054;
+    margin-bottom:.42rem;
+  }
+
+  .form-control,
+  .form-select{
+    min-height:44px;
+    border-radius:10px;
+    border-color:#d0d5dd;
+  }
+
+  .form-control:focus,
+  .form-select:focus{
+    border-color:#ff9a95;
+    box-shadow:0 0 0 .2rem rgba(255,92,87,.12);
+  }
+
+  .btn-filter{
+    min-height:44px;
+    border-radius:10px;
+    border:0;
+    background:var(--ds-coral);
+    color:#fff;
+    font-weight:700;
+    padding:0 18px;
+  }
+
+  .btn-filter:hover{color:#fff;filter:brightness(.98)}
+
+  .btn-clear{
+    min-height:44px;
+    border-radius:10px;
+    border:1px solid #d0d5dd;
+    background:#fff;
+    color:#475467;
+    font-weight:700;
+    padding:0 16px;
+  }
+
+  .btn-clear:hover{background:#f2f4f7}
+
+  .summary-row{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    margin:20px 0;
+  }
+
+  .summary-pill{
+    background:#fff;
+    border:1px solid var(--ds-border);
+    border-radius:12px;
+    padding:12px 15px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    min-width:165px;
+  }
+
+  .summary-icon{
+    width:36px;height:36px;
+    border-radius:10px;
+    display:grid;place-items:center;
+    background:#f2f4f7;
+    color:var(--ds-muted);
+    font-size:1rem;
+  }
+
+  .summary-value{
+    font-weight:800;
+    line-height:1.05;
+    font-size:1.1rem;
+  }
+
+  .summary-label{
+    color:var(--ds-muted);
+    font-size:.78rem;
+  }
+
+  .table-card{
+    overflow:hidden;
+  }
+
+  .table-card-head{
+    padding:18px 20px;
+    border-bottom:1px solid var(--ds-border);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  .table-card-head h2{
+    font-size:1.05rem;
+    font-weight:800;
+    margin:0;
+  }
+
+  table{
+    margin:0 !important;
+    min-width:750px;
+  }
+
+  thead th{
+    background:#f8fafc !important;
+    color:#475467 !important;
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    border-bottom:1px solid var(--ds-border) !important;
+    padding:13px 15px !important;
+    white-space:nowrap;
+  }
+
+  tbody td{
+    padding:14px 15px !important;
+    vertical-align:middle;
+    border-color:#eef0f3 !important;
+  }
+
+  tbody tr:hover{
+    background:#fffaf9;
+  }
+
+  .jornada-name{
+    font-weight:700;
+    color:#25324a;
+  }
+
+  .id-badge{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:5px 9px;
+    border-radius:8px;
+    background:#f2f4f7;
+    color:#475467;
+    font-size:.82rem;
+    font-weight:700;
+  }
+
+  .status-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:6px 10px;
+    border-radius:999px;
+    font-size:.78rem;
+    font-weight:800;
+    white-space:nowrap;
+  }
+
+  .status-badge::before{
+    content:"";
+    width:7px;height:7px;border-radius:50%;
+    background:currentColor;
+  }
+
+  .st-0{background:#fff6df;color:#a56400}
+  .st-1{background:#fff0f0;color:#c73737}
+  .st-2{background:#eaf7ef;color:#18864b}
+  .st-3{background:#eef2f6;color:#596579}
+  .st-4{background:#fff0f0;color:#c73737}
+
+  .actions-col{
+    display:flex;
+    gap:7px;
+  }
+
+  .icon-btn{
+    width:36px;height:36px;
+    border:1px solid var(--ds-border);
+    border-radius:9px;
+    display:grid;place-items:center;
+    background:#fff;
+    color:#475467;
+    cursor:pointer;
+    transition:.2s;
+    text-decoration:none;
+  }
+
+  .icon-btn:hover{
+    transform:translateY(-1px);
+    box-shadow:0 3px 8px rgba(16,24,40,.08);
+    color:inherit;
+  }
+
+  .icon-btn.edit:hover{color:#b7791f;border-color:#f3c75f;background:#fffaf0}
+  .icon-btn.status-btn:hover{color:#0d6efd;border-color:#8cb8ff;background:#f5f9ff}
+
+  .results-text{
+    color:var(--ds-muted);
+    font-size:.86rem;
+  }
+
+  .modal-content{
+    border:0;
+    border-radius:16px;
+    overflow:hidden;
+    box-shadow:0 18px 50px rgba(16,24,40,.18);
+  }
+
+  .modal-header{
+    background:#fff;
+    border-bottom:1px solid var(--ds-border);
+  }
+
+  .modal-title{font-weight:800}
+
+  .modal-footer{
+    border-top:1px solid var(--ds-border);
+  }
+
+  .btn-save{
+    background:var(--ds-coral);
+    color:#fff;
+    border:0;
+    border-radius:9px;
+    font-weight:700;
+    padding:.5rem 1.5rem;
+  }
+
+  .btn-save:hover{filter:brightness(.95);color:#fff}
+
+  .input-group-text{
+    border-color:#d0d5dd;
+    border-radius:10px 0 0 10px;
+    color:var(--ds-muted);
+  }
+
+  .input-group .form-control{
+    border-radius:0 10px 10px 0;
+  }
+
+  .eyebrow{
+    color:var(--ds-coral);
+    text-transform:uppercase;
+    font-size:.78rem;
+    letter-spacing:.08em;
+    font-weight:800;
+    margin-bottom:4px;
+  }
+
+  .page-title{
+    font-size:1.8rem;
+    font-weight:800;
+    margin:0 0 4px;
+  }
+
+  .page-subtitle{
+    color:var(--ds-muted);
+    margin:0;
+  }
+</style>
+
+<div class="container-fluid px-0" style="max-width:1280px;">
+
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3">
+    <div>
+      <div class="eyebrow">Administración</div>
+      <h1 class="page-title">Gestión de Jornadas</h1>
+      <p class="page-subtitle">Consulta, filtra y actualiza la información básica y el estatus de las jornadas.</p>
     </div>
-
-    <!-- Búsqueda -->
-    <div class="col-md-5">
-      <label for="buscar" class="form-label">Buscar jornada</label>
-      <input type="text" id="buscar" name="buscar" value="{{ buscar }}" class="form-control" placeholder="Nombre de jornada" onkeydown="if(event.key === 'Enter') this.form.submit()">
-    </div>
-  </form>
-
-  <!-- Tabla de jornadas -->
-  <div class="table-responsive mt-4">
-    <table class="table table-bordered table-striped">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Nombre</th>
-          <th>Fecha inicio</th>
-          <th>Estatus</th>
-          <th>Acción</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for j in jornadas %}
-        <tr> 
-          <td>{{ j.jornada_id }}</td>
-          <td>{{ j.jornada_nombre }}</td>
-          <td>{{ j.jornada_fecha_inicio }}</td>
-          <td>{{ j.jornada_status_str }}</td>
-          <td>
-            <button class="btn btn-warning btn-sm" onclick="editarNombre({{ j.jornada_id }}, '{{ pais }}', '{{ j.jornada_nombre }}')" title="Editar nombre">
-              <i class="bi bi-pencil-square"></i>
-            </button>
-            <button class="btn btn-secondary btn-sm" onclick="cambiarStatus({{ j.jornada_id }}, '{{ pais }}', {{ j.jornada_status }})" title="Cambiar estatus">
-              <i class="bi bi-arrow-repeat"></i>
-            </button>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
   </div>
-</div>
 
-<!-- Modal reutilizable -->
-<div class="modal fade" id="jornadaModal" tabindex="-1" aria-labelledby="jornadaModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title" id="jornadaModalLabel">Actualizar</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-      </div>
-      <div class="modal-body">
-        <input type="text" id="modalInputField" class="form-control" placeholder="" />
-        <select id="modalStatusSelect" class="form-select d-none mt-2">
-          <option value="0">Pendiente</option>
-          <option value="1">Suspendida</option>
-          <option value="2">En Marcha</option>
-          <option value="3">Finalizada</option>
-          <option value="4">Cancelada</option>
+  <!-- Filtros -->
+  <section class="toolbar-card">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label" for="pais">País</label>
+        <select id="pais" name="pais" class="form-select">
+          <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+          <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+          <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
         </select>
       </div>
+
+      <div class="col-md-4">
+        <label class="form-label" for="buscar">Buscar jornada</label>
+        <div class="input-group">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input id="buscar" name="buscar" value="{{ buscar }}" class="form-control" placeholder="Nombre o ID de jornada">
+        </div>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label" for="estatus">Estatus</label>
+        <select id="estatus" name="estatus" class="form-select">
+          <option value="">Todos</option>
+          <option value="0" {% if estatus == 0 %}selected{% endif %}>Pendiente</option>
+          <option value="1" {% if estatus == 1 %}selected{% endif %}>Suspendida</option>
+          <option value="2" {% if estatus == 2 %}selected{% endif %}>En marcha</option>
+          <option value="3" {% if estatus == 3 %}selected{% endif %}>Finalizada</option>
+          <option value="4" {% if estatus == 4 %}selected{% endif %}>Cancelada</option>
+        </select>
+      </div>
+
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn-filter flex-grow-1">
+          <i class="bi bi-funnel me-1"></i> Filtrar
+        </button>
+        <a href="/jornadas/v2?pais={{ pais }}" class="btn-clear" title="Limpiar filtros">
+          <i class="bi bi-arrow-counterclockwise"></i>
+        </a>
+      </div>
+    </form>
+  </section>
+
+  <!-- Resumen -->
+  <div class="summary-row">
+    <div class="summary-pill">
+      <div class="summary-icon"><i class="bi bi-calendar3"></i></div>
+      <div><div class="summary-value">{{ jornadas|length }}</div><div class="summary-label">Jornadas visibles</div></div>
+    </div>
+    <div class="summary-pill">
+      <div class="summary-icon" style="color:#18864b"><i class="bi bi-play-circle"></i></div>
+      <div><div class="summary-value">{{ jornadas|selectattr('jornada_status','equalto',2)|list|length }}</div><div class="summary-label">En marcha</div></div>
+    </div>
+    <div class="summary-pill">
+      <div class="summary-icon" style="color:#596579"><i class="bi bi-check-circle"></i></div>
+      <div><div class="summary-value">{{ jornadas|selectattr('jornada_status','equalto',3)|list|length }}</div><div class="summary-label">Finalizadas</div></div>
+    </div>
+    <div class="summary-pill">
+      <div class="summary-icon" style="color:#a56400"><i class="bi bi-hourglass-split"></i></div>
+      <div><div class="summary-value">{{ jornadas|selectattr('jornada_status','equalto',0)|list|length }}</div><div class="summary-label">Pendientes</div></div>
+    </div>
+  </div>
+
+  <!-- Tabla -->
+  <section class="table-card">
+    <div class="table-card-head">
+      <h2>Listado de jornadas</h2>
+      <div class="results-text">Ordenadas por ID reciente</div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th style="width:90px;">ID</th>
+            <th>Nombre</th>
+            <th style="width:160px;">Fecha inicio</th>
+            <th style="width:150px;">Estatus</th>
+            <th style="width:120px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for j in jornadas %}
+          <tr>
+            <td><span class="id-badge">{{ j.jornada_id }}</span></td>
+            <td><span class="jornada-name">{{ j.jornada_nombre }}</span></td>
+            <td>{{ j.jornada_fecha_inicio }}</td>
+            <td><span class="status-badge st-{{ j.jornada_status }}">{{ j.jornada_status_str }}</span></td>
+            <td>
+              <div class="actions-col">
+                <button class="icon-btn edit" title="Editar nombre"
+                  onclick="editarNombre({{ j.jornada_id }}, '{{ pais }}', '{{ j.jornada_nombre }}')">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+                <button class="icon-btn status-btn" title="Cambiar estatus"
+                  onclick="cambiarStatus({{ j.jornada_id }}, '{{ pais }}', {{ j.jornada_status }})">
+                  <i class="bi bi-arrow-repeat"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-footer">
+      <div class="results-text">Mostrando {{ jornadas|length }} jornada{{ 's' if jornadas|length != 1 }}</div>
+    </div>
+  </section>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="jornadaModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title" id="modalTitle">Actualizar</h5>
+          <div class="text-secondary small" id="modalSubtitle"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="nameGroup">
+          <label class="form-label">Nombre de jornada</label>
+          <input class="form-control" id="modalInputField">
+        </div>
+        <div id="statusGroup" class="d-none">
+          <label class="form-label">Nuevo estatus</label>
+          <select class="form-select" id="modalStatusSelect">
+            <option value="0">Pendiente</option>
+            <option value="1">Suspendida</option>
+            <option value="2">En marcha</option>
+            <option value="3">Finalizada</option>
+            <option value="4">Cancelada</option>
+          </select>
+          <div class="small text-secondary mt-2">
+            <i class="bi bi-info-circle me-1"></i>
+            Este cambio modifica el estado operativo de la jornada.
+          </div>
+        </div>
+      </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-primary" id="jornadaModalAceptar">Aceptar</button>
+        <button class="btn btn-light border" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-save" id="jornadaModalAceptar">Guardar cambios</button>
       </div>
     </div>
   </div>
@@ -84,39 +447,39 @@
 <script>
 let accion = "";
 let jornadaId = null;
-let pais = "";
+let paisValue = "";
 
 function editarNombre(id, p, nombre) {
   accion = "editar-nombre";
   jornadaId = id;
-  pais = p;
+  paisValue = p;
+  document.getElementById("modalTitle").textContent = "Editar nombre de jornada";
+  document.getElementById("modalSubtitle").textContent = "Actualiza únicamente el nombre visible.";
   document.getElementById("modalInputField").value = nombre;
-  document.getElementById("modalInputField").classList.remove("d-none");
-  document.getElementById("modalStatusSelect").classList.add("d-none");
-
-  document.getElementById("jornadaModalLabel").textContent = "Editar nombre de jornada";
+  document.getElementById("nameGroup").classList.remove("d-none");
+  document.getElementById("statusGroup").classList.add("d-none");
   new bootstrap.Modal(document.getElementById("jornadaModal")).show();
 }
 
 function cambiarStatus(id, p, actual) {
   accion = "cambiar-status";
   jornadaId = id;
-  pais = p;
+  paisValue = p;
+  document.getElementById("modalTitle").textContent = "Cambiar estatus de jornada";
+  document.getElementById("modalSubtitle").textContent = "Estatus actual: " + ["Pendiente","Suspendida","En marcha","Finalizada","Cancelada"][actual];
   document.getElementById("modalStatusSelect").value = actual;
-  document.getElementById("modalStatusSelect").classList.remove("d-none");
-  document.getElementById("modalInputField").classList.add("d-none");
-
-  document.getElementById("jornadaModalLabel").textContent = "Cambiar estatus de jornada";
+  document.getElementById("nameGroup").classList.add("d-none");
+  document.getElementById("statusGroup").classList.remove("d-none");
   new bootstrap.Modal(document.getElementById("jornadaModal")).show();
 }
 
-// Enviar acción
-window.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", () => {
+  // Enviar acción del modal
   document.getElementById("jornadaModalAceptar").addEventListener("click", () => {
     const formData = new FormData();
     formData.append("accion", accion);
     formData.append("jornada_id", jornadaId);
-    formData.append("pais", pais);
+    formData.append("pais", paisValue);
 
     if (accion === "editar-nombre") {
       formData.append("nuevo_nombre", document.getElementById("modalInputField").value);
@@ -137,6 +500,18 @@ window.addEventListener("DOMContentLoaded", () => {
     });
 
     bootstrap.Modal.getInstance(document.getElementById("jornadaModal")).hide();
+  });
+
+  // Búsqueda automática después de 4 caracteres
+  const buscarInput = document.getElementById("buscar");
+  let debounceTimer;
+
+  buscarInput.addEventListener("input", function() {
+    clearTimeout(debounceTimer);
+    const valor = this.value.trim();
+    if (valor.length >= 4 || valor.length === 0) {
+      debounceTimer = setTimeout(() => buscarInput.form.submit(), 500);
+    }
   });
 });
 </script>

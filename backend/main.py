@@ -18,6 +18,7 @@ from backend.db.queries import (
 )
 from backend.services.carga_pesquisas import procesar_excel_pesquisa_antropometrica
 from backend.services.carga_pesquisa_sanguineo import procesar_excel_pesquisa_sanguineo
+from backend.services.carga_vitales import procesar_excel_vitales
 
 app = FastAPI(root_path="/carga_masiva")
 #app = FastAPI()
@@ -696,11 +697,86 @@ async def cargar_excel_pesquisa_sanguineo(
 
     except Exception as e:
         return {"status": "error", "mensaje": str(e)}
+#CARGA VITALES
+
+@app.post("/api/cargar_excel_vitales")
+async def cargar_excel_vitales(
+    file: UploadFile = File(...),
+    pais: str = Form(...),
+    actividad: str = Form(...),
+    destino_id: int = Form(...)
+):
+    try:
+        actividad = actividad.lower().strip()
+
+        content = await file.read()
+        df = pd.read_excel(BytesIO(content), header=0)
+        df.columns = df.columns.str.strip()
+
+        columnas_necesarias = [
+            "id_digisalud", "nombres", "apellidos",
+            "Temperatura (°C)", "TA_SISTOLICA", "TA_DIASTOLICA",
+            "Frecuencia Cardíaca (lpm)", "Frecuencia Respiratoria (rpm)",
+            "Saturacion de Oxigeno", "Fecha de Evaluacion"
+        ]
+        for col in columnas_necesarias:
+            if col not in df.columns:
+                return {"status": "error", "mensaje": f"Falta columna: {col}"}
+
+        resultado = procesar_excel_vitales(df, pais, actividad, destino_id)
+
+        conn = get_connection(pais)
+        cursor = conn.cursor()
+
+        tabla = "psi_pesquisas_x_paciente" if actividad == "jornada" else "psi_pesquisas_x_centro"
+        id_campo = "jornada_id" if actividad == "jornada" else "centro_id"
+
+        errores = list(resultado["errores"])
+        insertados = 0
+
+        for item in resultado["pesquisas"]:
+            sql = f"""
+                INSERT INTO {tabla} (
+                    persona_id, {id_campo}, tipo_pesquisa_id, pesq_x_pac_valor,
+                    pesq_x_pac_fecha_evauacion, control_usuario_creacion, control_fecha_creacion
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, CURDATE())
+            """
+            data = (
+                item["persona_id"],
+                item[id_campo],
+                item["tipo_pesquisa_id"],
+                item["pesquisa_valor"],
+                item["fecha"],
+                1522702145282
+            )
+            cursor.execute(sql, data)
+            insertados += 1
+
+        conn.commit()
+        conn.close()
+
+        return {
+            "status": "ok",
+            "insertados": insertados,
+            "errores": errores
+        }
+
+    except Exception as e:
+        return {"status": "error", "mensaje": str(e)}
+
+
 # Rutas de descarga de archivos de plantilla
 @app.get("/descargas/beneficiario", response_class=FileResponse)
 def descargar_beneficiario():
     ruta = BASE_DIR / "plantillas" / "CargaMasiva_Beneficiario.xlsx"
     return FileResponse(path=ruta, filename="Plantilla_Beneficiario.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.get("/descargas/vitales", response_class=FileResponse)
+def descargar_vitales():
+    ruta = BASE_DIR / "plantillas" / "plantilla_vitales_digisalud - V1P.xlsx"
+    return FileResponse(path=ruta, filename="Plantilla_Vitales.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.get("/descargas/antropometria", response_class=FileResponse)
@@ -833,7 +909,8 @@ async def accion_usuario_v2(
 async def gestion_jornadas_v2(
     request: Request,
     pais: str = "vzla",
-    buscar: str = ""
+    buscar: str = "",
+    estatus: int = None
 ):
     # Verificación de sesión
     session_token = request.cookies.get("session")
@@ -846,7 +923,7 @@ async def gestion_jornadas_v2(
 
     # Consulta jornadas
     query = """
-        SELECT jornada_id, jornada_nombre, jornada_status,  jornada_fecha_inicio
+        SELECT jornada_id, jornada_nombre, jornada_status, jornada_fecha_inicio
         FROM psi_jornadas
         WHERE 1 = 1
     """
@@ -855,6 +932,10 @@ async def gestion_jornadas_v2(
     if buscar:
         query += " AND jornada_nombre LIKE %s"
         params.append(f"%{buscar}%")
+
+    if estatus is not None:
+        query += " AND jornada_status = %s"
+        params.append(estatus)
 
     query += " ORDER BY jornada_id DESC"
     cursor.execute(query, params)
@@ -882,6 +963,7 @@ async def gestion_jornadas_v2(
         "request": request,
         "pais": pais,
         "buscar": buscar,
+        "estatus": estatus,
         "jornadas": jornadas
     })
 @app.post("/jornadas/v2/accion")

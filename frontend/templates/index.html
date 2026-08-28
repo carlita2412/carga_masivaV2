@@ -3,249 +3,647 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Digisalud</title>
+  <title>Digisalud | Carga masiva</title>
 
-  <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
-  <!-- Select2 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-  <!-- jQuery (requerido por Select2) -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <!-- Select2 JS -->
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
   <style>
-   body {
-      overflow-x: hidden;
-      background-color: #f8f9fa;
+    :root{
+      --ds-coral:#ff5c57;
+      --ds-orange:#f5a623;
+      --ds-ink:#263244;
+      --ds-muted:#667085;
+      --ds-border:#e4e7ec;
+      --ds-bg:#f7f9fc;
+      --ds-sidebar:#2d3748;
     }
 
-    #sidebar {
-      width: 250px;
-      background-color: #2D3748 !important;
-      color: white;
-      position: fixed;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      padding-top: 56px;
-      transition: transform 0.3s ease;
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background:var(--ds-bg);
+      color:var(--ds-ink);
+      font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+      min-height:100vh;
+      display:flex;
+      flex-direction:column;
     }
 
-    #sidebar.hidden {
-      transform: translateX(-100%);
+    .topbar{
+      min-height:64px;
+      background:linear-gradient(90deg,var(--ds-coral),var(--ds-orange));
+      box-shadow:0 3px 16px rgba(16,24,40,.10);
     }
 
-    #sidebar a {
-      display: block;
-      color: white;
-      padding: 12px 20px;
-      text-decoration: none;
+    .brand{
+      font-weight:800;
+      letter-spacing:.02em;
+      color:#fff;
+      text-decoration:none;
+      font-size:1.1rem;
     }
 
-    #sidebar a:hover {
-      background-color: #70757b;
+    .brand .mark{
+      width:38px;height:38px;border-radius:10px;
+      display:inline-grid;place-items:center;
+      background:rgba(255,255,255,.18);
+      margin-right:.65rem;
+      font-size:1.1rem;
     }
 
-    .topbar {
-      background: linear-gradient(to right, #f45d4c, #ffa736);
-      height: 56px;
+    .sidebar{
+      width:250px;
+      position:fixed;
+      top:64px;bottom:0;left:0;
+      background:var(--ds-sidebar);
+      padding:22px 14px;
+      overflow-y:auto;
+      z-index:100;
+      transition:transform .3s ease;
     }
 
-    .main-content {
-      margin-left: 250px;
-      padding: 70px 20px 20px;
+    .sidebar.hidden{transform:translateX(-100%)}
+
+    .sidebar a{
+      display:flex;
+      align-items:center;
+      gap:.75rem;
+      color:#eef2f6;
+      text-decoration:none;
+      border-radius:10px;
+      padding:11px 13px;
+      margin-bottom:5px;
+      font-size:.92rem;
     }
 
-    .hamburger {
-      font-size: 24px;
-      background: none;
-      border: none;
-      color: white;
+    .sidebar a:hover,.sidebar a.active{
+      background:rgba(255,255,255,.10);
     }
 
-    .logo {
-      height: 50px;
+    .sidebar .sub-link{
+      padding-left:38px;
+      font-size:.85rem;
+      margin-bottom:2px;
+      border-radius:8px;
     }
 
-    footer {
-      background-color: #2D3748;
-      color: white;
+    .main{
+      margin-left:250px;
+      padding:90px 34px 42px;
+      flex:1;
     }
 
-    .digisalud-header {
-      background: linear-gradient(to right, #ff4e50, #f9d423);
-      color: white;
-      padding: 20px 0;
-      text-align: center;
+    .page-title{
+      font-size:1.65rem;
+      font-weight:800;
+      margin-bottom:.3rem;
     }
 
-    .digisalud-logo {
-      font-size: 2rem;
-      font-weight: bold;
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
+    .page-subtitle{
+      color:var(--ds-muted);
+      margin-bottom:0;
+      font-size:.95rem;
     }
 
-    .fuente1 {
-      color: #ff4e50;
+    .user-chip{
+      display:inline-flex;
+      align-items:center;
+      gap:.55rem;
+      background:#fff;
+      color:var(--ds-ink);
+      border-radius:999px;
+      padding:.45rem .8rem;
+      font-size:.9rem;
+      box-shadow:0 2px 8px rgba(16,24,40,.08);
     }
-    </style>
+
+    .stepper{
+      display:flex;
+      gap:8px;
+      margin:24px 0;
+      flex-wrap:wrap;
+    }
+
+    .step{
+      flex:1 1 160px;
+      border:1px solid var(--ds-border);
+      background:#fff;
+      border-radius:12px;
+      padding:12px 14px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:var(--ds-muted);
+      font-weight:600;
+      font-size:.9rem;
+    }
+
+    .step-number{
+      width:28px;height:28px;border-radius:50%;
+      display:grid;place-items:center;
+      background:#f2f4f7;
+      font-size:.85rem;
+      flex-shrink:0;
+    }
+
+    .step.active{
+      border-color:#ffd1cf;
+      background:#fff8f7;
+      color:var(--ds-coral);
+    }
+
+    .step.active .step-number{
+      background:var(--ds-coral);
+      color:#fff;
+    }
+
+    .upload-card{
+      border:0;
+      border-radius:18px;
+      box-shadow:0 10px 30px rgba(16,24,40,.08);
+      overflow:hidden;
+    }
+
+    .card-head{
+      padding:22px 26px;
+      border-bottom:1px solid var(--ds-border);
+      background:#fff;
+    }
+
+    .card-body-custom{
+      padding:26px;
+    }
+
+    .section-title{
+      font-size:1rem;
+      font-weight:800;
+      margin-bottom:16px;
+      display:flex;
+      align-items:center;
+      gap:.55rem;
+      color:var(--ds-ink);
+    }
+
+    .form-label{
+      font-weight:700;
+      font-size:.92rem;
+      margin-bottom:.45rem;
+      color:var(--ds-ink);
+    }
+
+    .form-select,.form-control{
+      min-height:46px;
+      border-radius:10px;
+      border-color:#d0d5dd;
+      font-size:.92rem;
+    }
+
+    .form-select:focus,.form-control:focus{
+      border-color:#ff9a95;
+      box-shadow:0 0 0 .2rem rgba(255,92,87,.12);
+    }
+
+    .context-box{
+      background:#f8fafc;
+      border:1px solid var(--ds-border);
+      border-radius:14px;
+      padding:18px;
+      height:100%;
+    }
+
+    .context-row{
+      display:flex;
+      justify-content:space-between;
+      gap:18px;
+      padding:8px 0;
+      border-bottom:1px dashed #e4e7ec;
+      font-size:.92rem;
+    }
+
+    .context-row:last-child{border-bottom:0}
+    .context-row span:first-child{color:var(--ds-muted)}
+    .context-row strong{text-align:right;color:var(--ds-ink)}
+
+    .dropzone{
+      border:2px dashed #d0d5dd;
+      border-radius:14px;
+      padding:30px 20px;
+      text-align:center;
+      background:#fcfcfd;
+      transition:.2s ease;
+      cursor:pointer;
+    }
+
+    .dropzone:hover{
+      border-color:#ff8b86;
+      background:#fff8f7;
+    }
+
+    .dropzone .icon{
+      width:54px;height:54px;border-radius:14px;
+      display:grid;place-items:center;
+      margin:0 auto 12px;
+      font-size:1.5rem;
+      background:#fff1f0;
+      color:var(--ds-coral);
+    }
+
+    .helper{
+      color:var(--ds-muted);
+      font-size:.86rem;
+    }
+
+    .file-name{
+      margin-top:12px;
+      font-size:.9rem;
+      font-weight:600;
+      color:var(--ds-ink);
+    }
+
+    .action-bar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:16px;
+      padding-top:22px;
+      margin-top:24px;
+      border-top:1px solid var(--ds-border);
+    }
+
+    .btn-load{
+      background:linear-gradient(90deg,var(--ds-coral),#ff7f50);
+      border:0;
+      color:#fff;
+      font-weight:700;
+      border-radius:10px;
+      padding:.72rem 1.35rem;
+      min-width:165px;
+      font-size:.95rem;
+    }
+
+    .btn-load:hover{color:#fff;filter:brightness(.98)}
+
+    .mini-link{
+      color:var(--ds-coral);
+      text-decoration:none;
+      font-weight:700;
+      font-size:.9rem;
+    }
+
+    .mini-link:hover{color:#e04440}
+
+    .alert-soft{
+      background:#fff8e8;
+      color:#7a4d00;
+      border:1px solid #ffe2a8;
+      border-radius:12px;
+      padding:12px 14px;
+      font-size:.9rem;
+    }
+
+    .hamburger{
+      font-size:24px;
+      background:none;
+      border:none;
+      color:white;
+      cursor:pointer;
+      padding:4px 8px;
+    }
+
+    .badge-format{
+      background:#f2f4f7;
+      color:var(--ds-muted);
+      border:1px solid var(--ds-border);
+      border-radius:999px;
+      padding:.4rem .8rem;
+      font-size:.82rem;
+      font-weight:600;
+    }
+
+    .pesquisa-group{transition:.2s ease}
+
+    .select2-container--default .select2-selection--single{
+      min-height:46px;
+      border-radius:10px;
+      border-color:#d0d5dd;
+      padding:6px 12px;
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__rendered{
+      line-height:32px;
+      color:var(--ds-ink);
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__arrow{
+      height:34px;
+    }
+
+    .select2-container--default.select2-container--focus .select2-selection--single,
+    .select2-container--default.select2-container--open .select2-selection--single{
+      border-color:#ff9a95;
+      box-shadow:0 0 0 .2rem rgba(255,92,87,.12);
+    }
+
+    footer{
+      background:var(--ds-sidebar);
+      color:#c1c9d4;
+      text-align:center;
+      padding:14px;
+      font-size:.85rem;
+      margin-left:250px;
+    }
+
+    @media (max-width:991px){
+      .sidebar{display:none}
+      .main{margin-left:0;padding:90px 18px 28px}
+      footer{margin-left:0}
+    }
+  </style>
 </head>
-<body class="d-flex flex-column min-vh-100">
+<body>
 
-   <header class="digisalud-header">
-      
-  <div class="container">
-    <nav class="navbar topbar fixed-top px-3 d-flex align-items-center">
-    <button class="hamburger me-3" onclick="toggleSidebar()">☰</button>
-    <div class="digisalud-logo">
-      
-      <span class="digisalud-icon"><img src="{{ request.url_for('static', path='img/digisalud.png') }}" alt="DIGISALUD" class="logo"></span> <!-- Puedes reemplazar por un SVG o ícono real -->
+  <!-- Topbar -->
+  <nav class="navbar topbar fixed-top px-3 px-lg-4">
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+      <div class="d-flex align-items-center gap-3">
+        <button class="hamburger" onclick="toggleSidebar()"><i class="bi bi-list"></i></button>
+        <a class="brand d-flex align-items-center" href="/carga">
+          <span class="mark"><i class="bi bi-heart-pulse-fill"></i></span>
+          DIGISALUD
+        </a>
+      </div>
+      <div class="user-chip">
+        <i class="bi bi-person-circle"></i>
+        {{ usuario }}
+      </div>
     </div>
   </nav>
-   
-  </div>
-</header>
 
   <!-- Sidebar -->
-  <div id="sidebar" class="hidden">
-    <a href="/carga">Inicio</a>
-    <a href="/carga">Carga Masiva</a>
-    <!--<a href="#">Reportes</a>-->
+  <aside class="sidebar" id="sidebar">
+    <a href="/carga" class="active"><i class="bi bi-house-door"></i> Inicio</a>
+    <a href="/carga"><i class="bi bi-cloud-arrow-up"></i> Carga masiva</a>
 
-    <!--<a href="#">Configuración</a>-->
-       <!-- JRORNADAS (Desplegable) -->
-<!-- Jornadas (Desplegable) -->
-<a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuJornadas" role="button">
-  <i class="bi bi-calendar-event text-white"></i> Jornadas
-  <span class="ms-2">▼</span>
-</a>
-<div class="collapse ps-3" id="submenuJornadas">
-  <a href="/jornadas/v2">Gestionar Jornadas</a>
-</div>
+    <a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuJornadas" role="button">
+      <span><i class="bi bi-calendar-event"></i> Jornadas</span>
+      <i class="bi bi-chevron-down small"></i>
+    </a>
+    <div class="collapse" id="submenuJornadas">
+      <a href="/jornadas/v2" class="sub-link">Gestionar Jornadas</a>
+    </div>
 
-    <!-- Usuarios (Desplegable) -->
- 
-<a  class="d-flex justify-content-between align-items-center"  href="/usuarios/v2" ><i class="bi bi-person-gear"></i>Gestionar Usuarios</a>
-  
+    <a href="/usuarios/v2"><i class="bi bi-people"></i> Gestionar usuarios</a>
 
-      <!-- DESCARGAS (Desplegable) -->
-  <a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuDescargas" role="button" aria-expanded="false" aria-controls="submenuDescargas">
-    <i class="bi bi-download"></i>  Descargas
-    <span class="ms-2">▼</span>
-  </a>
-  <div class="collapse ps-3" id="submenuDescargas">
-      <a href="/carga_masiva/descargas/beneficiario" download>Plantilla Beneficiario</a>
-      <a href="/carga_masiva/descargas/antropometria" download>Plantilla Antropometría</a>
-      <a href="/carga_masiva/descargas/sanguineo" download>Plantilla Sanguíneo</a>
-      <a href="/carga_masiva/descargas/manual" download>Manual de Usuario</a>
-  </div>
-     <a href="/logout"><i class="bi bi-power"></i> Cerrar sesión</a>
-  </div>
+    <a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuDescargas" role="button">
+      <span><i class="bi bi-download"></i> Descargas</span>
+      <i class="bi bi-chevron-down small"></i>
+    </a>
+    <div class="collapse" id="submenuDescargas">
+      <a href="/carga_masiva/descargas/beneficiario" download class="sub-link">Plantilla Beneficiario</a>
+      <a href="/carga_masiva/descargas/antropometria" download class="sub-link">Plantilla Antropometría</a>
+      <a href="/carga_masiva/descargas/sanguineo" download class="sub-link">Plantilla Sanguíneo</a>
+      <a href="/carga_masiva/descargas/vitales" download class="sub-link">Plantilla Vitales</a>
+      <a href="/carga_masiva/descargas/manual" download class="sub-link">Manual de Usuario</a>
+    </div>
+
+    <a href="/logout" class="mt-3"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a>
+  </aside>
 
   <!-- Main content -->
-  <div class="main-content" id="mainContent">
-    <div class="header mt-4">
-        <h4 class="fuente1">Bienvenid@, <strong>{{ usuario }}</strong></h4>
-        
+  <main class="main">
+    <div class="container-fluid px-0" style="max-width:1180px;">
+
+      <!-- Header -->
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-2">
+        <div>
+          <div class="text-uppercase small fw-bold" style="color:var(--ds-coral);letter-spacing:.08em;">Carga masiva</div>
+          <h1 class="page-title">Importar información desde Excel</h1>
+          <p class="page-subtitle">Selecciona el destino y el tipo de datos antes de adjuntar el archivo.</p>
+        </div>
+        <div class="d-flex gap-3">
+          <a href="/carga_masiva/descargas/beneficiario" download class="mini-link"><i class="bi bi-file-earmark-arrow-down me-1"></i> Plantilla Beneficiarios</a>
+          <a href="/carga_masiva/descargas/antropometria" download class="mini-link"><i class="bi bi-file-earmark-arrow-down me-1"></i> Plantilla Antropometría</a>
+          <a href="/carga_masiva/descargas/sanguineo" download class="mini-link"><i class="bi bi-file-earmark-arrow-down me-1"></i> Plantilla Sanguíneo</a>
+          <a href="/carga_masiva/descargas/vitales" download class="mini-link"><i class="bi bi-file-earmark-arrow-down me-1"></i> Plantilla Vitales</a>
+        </div>
+      </div>
+
+      <!-- Stepper -->
+      <div class="stepper" aria-label="Progreso de carga">
+        <div class="step active" id="step1"><span class="step-number">1</span> Configuración</div>
+        <div class="step" id="step2"><span class="step-number">2</span> Archivo</div>
+        <div class="step" id="step3"><span class="step-number">3</span> Validación</div>
+        <div class="step" id="step4"><span class="step-number">4</span> Resultado</div>
+      </div>
+
+      <!-- Card principal -->
+      <section class="card upload-card">
+        <div class="card-head">
+          <div class="d-flex justify-content-between align-items-center gap-3">
+            <div>
+              <h2 class="h5 fw-bold mb-1">Nueva carga</h2>
+              <div class="helper">Los campos marcados con * son obligatorios.</div>
+            </div>
+            <span class="badge-format">
+              <i class="bi bi-shield-check me-1"></i> Excel .xlsx / .xls
+            </span>
+          </div>
+        </div>
+
+        <div class="card-body-custom">
+          <form id="uploadForm">
+
+            <!-- Sección 1: Destino -->
+            <div class="section-title"><i class="bi bi-sliders"></i> 1. Define el destino de la carga</div>
+
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label for="country" class="form-label">País *</label>
+                <select class="form-select" id="country" name="country" required>
+                  <option value="">-- Seleccionar --</option>
+                  <option value="vzla">Venezuela</option>
+                  <option value="colombia">Colombia</option>
+                  <option value="elsalvador">El Salvador</option>
+                </select>
+              </div>
+
+              <div class="col-md-4">
+                <label for="actividad" class="form-label">Actividad *</label>
+                <select class="form-select" id="actividad" name="actividad" required>
+                  <option value="">-- Seleccionar --</option>
+                  <option value="jornada">Jornada</option>
+                  <option value="centro">Centro</option>
+                </select>
+              </div>
+
+              <div class="col-md-4">
+                <label for="dataType" class="form-label">Tipo de carga *</label>
+                <select class="form-select" id="dataType" name="dataType" required>
+                  <option value="">-- Seleccionar --</option>
+                  <option value="beneficiarios">Beneficiarios</option>
+                  <option value="pesquisas">Pesquisas</option>
+                </select>
+              </div>
+
+              <div class="col-lg-8">
+                <div id="destinoContainer">
+                  <label class="form-label">Selecciona destino *</label>
+                  <select class="form-select" disabled>
+                    <option>Primero selecciona país y actividad</option>
+                  </select>
+                </div>
+                <div class="helper mt-1" id="destinoHelper">Puedes buscar por ID, nombre o institución.</div>
+              </div>
+
+              <div class="col-lg-4">
+                <div class="context-box">
+                  <div class="fw-bold mb-2"><i class="bi bi-info-circle me-1"></i> Resumen</div>
+                  <div class="context-row"><span>País</span><strong id="resumenPais">—</strong></div>
+                  <div class="context-row"><span>Actividad</span><strong id="resumenActividad">—</strong></div>
+                  <div class="context-row"><span>Tipo</span><strong id="resumenTipo">—</strong></div>
+                  <div class="context-row"><span>Destino</span><strong id="resumenDestino">—</strong></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Subtipo de pesquisa -->
+            <div class="pesquisa-group mt-3" id="pesquisaTypeGroup" style="display:none;">
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <label for="pesquisaType" class="form-label">Tipo de Pesquisa *</label>
+                  <select class="form-select" id="pesquisaType" name="pesquisaType">
+                    <option value="">-- Seleccionar --</option>
+                    <option value="antropometria">Antropometría</option>
+                    <option value="sanguineo">Sanguíneo</option>
+                    <option value="vitales">Vitales</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sección 2: Archivo -->
+            <div class="section-title mt-4"><i class="bi bi-file-earmark-spreadsheet"></i> 2. Adjunta el archivo</div>
+
+            <label class="dropzone w-100" for="excelFile" id="dropzoneLabel">
+              <div class="icon"><i class="bi bi-cloud-arrow-up"></i></div>
+              <div class="fw-bold">Arrastra tu archivo Excel aquí</div>
+              <div class="helper mt-1">o haz clic para seleccionarlo desde tu equipo</div>
+              <div class="helper mt-2">Formatos permitidos: .xlsx y .xls</div>
+              <div id="fileName" class="file-name d-none"></div>
+            </label>
+            <input class="d-none" type="file" id="excelFile" name="file" accept=".xlsx,.xls" required>
+
+            <div class="alert-soft mt-3">
+              <i class="bi bi-lightbulb me-1"></i>
+              Usa la plantilla correspondiente al tipo de carga para reducir errores de validación.
+            </div>
+
+            <!-- Barra de acciones -->
+            <div class="action-bar">
+              <div class="helper">
+                <i class="bi bi-check2-circle me-1"></i>
+                Antes de cargar, revisaremos estructura y campos obligatorios.
+              </div>
+              <button type="submit" class="btn btn-load" id="btnCargar">
+                <i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar
+              </button>
+            </div>
+
+            <!-- Feedback -->
+            <div id="feedback" class="mt-3"></div>
+          </form>
+        </div>
+      </section>
     </div>
- 
-  <div class="card mt-4" style="border: 1px solid rgb(114, 112, 112); width: 80%;">
-        <div class="card-body">
+  </main>
 
-        <form id="uploadForm">
-          <!-- País -->
-          <div class="mb-3">
-            <label for="country" class="form-label">País</label>
-            <select class="form-select" id="country" name="country" required>
-              <option value="">-- Seleccionar --</option>
-              <option value="vzla">Venezuela</option>
-              <option value="colombia">Colombia</option>
-              <option value="elsalvador">El Salvador</option>
-            </select>
-          </div>
-
-          <!-- Actividad -->
-          <div class="mb-3">
-            <label for="actividad" class="form-label">Actividad</label>
-            <select class="form-select" id="actividad" name="actividad" required>
-              <option value="">-- Seleccionar --</option>
-              <option value="jornada">Jornada</option>
-              <option value="centro">Centro</option>
-            </select>
-          </div>
-
-        
-          <!-- Tipo de carga -->
-          <div class="mb-3">
-            <label for="dataType" class="form-label">Tipo de Carga</label>
-            <select class="form-select" id="dataType" name="dataType" required>
-              <option value="">-- Seleccionar --</option>
-              <option value="beneficiarios">Beneficiarios</option>
-              <option value="pesquisas">Pesquisas</option>
-            </select>
-          </div>
-          <!-- Destino (se inyecta dinámicamente) -->
-          <div class="mb-3" id="destinoContainer"></div>
-
-          <!-- Subtipo de pesquisa -->
-          <div class="mb-3" id="pesquisaTypeGroup" style="display: none;">
-            <label for="pesquisaType" class="form-label">Tipo de Pesquisa</label>
-            <select class="form-select" id="pesquisaType" name="pesquisaType">
-              <option value="">-- Seleccionar --</option>
-              <option value="antropometria">Antropometría</option>
-              <option value="sanguineo">Sanguíneo</option>
-            </select>
-          </div>
-
-          <!-- Archivo Excel -->
-          <div class="mb-3">
-            <label for="excelFile" class="form-label">Archivo Excel</label>
-            <input type="file" class="form-control" id="excelFile" name="file" accept=".xlsx,.xls" required>
-          </div>
-
-          <button type="submit" class="btn btn-primary">Cargar</button>
-        </form>
-
-        <div class="mt-3" id="feedback"></div>
-  </div>
-  </div>
-  </div>
+  <footer>
+    &copy; Copyright 2025. Derechos reservados.
+  </footer>
 
   <!-- Bootstrap Bundle -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-  <!-- Toggle Logic -->
   <script>
-    function toggleSidebar() {
-      const sidebar = document.getElementById("sidebar");
-      const mainContent = document.getElementById("mainContent");
-
-      sidebar.classList.toggle("hidden");
-      mainContent.classList.toggle("expanded");
-    }
-  </script>
-<script>
+    // Prevenir refresh duplicado
     if (window.history.replaceState) {
-        window.history.replaceState(null, null, window.location.href);
+      window.history.replaceState(null, null, window.location.href);
     }
-
     window.onpageshow = function(event) {
-        if (event.persisted || (window.performance && window.performance.navigation.type === 2)) {
-            window.location.reload();
-        }
+      if (event.persisted || (window.performance && window.performance.navigation.type === 2)) {
+        window.location.reload();
+      }
     };
-</script>
- 
+  </script>
 
   <script>
-    // Mostrar u ocultar subtipo si es pesquisa
+    // Toggle sidebar
+    function toggleSidebar() {
+      document.getElementById("sidebar").classList.toggle("hidden");
+    }
+
+    // Actualizar resumen
+    function actualizarResumen() {
+      const pais = document.getElementById('country');
+      const actividad = document.getElementById('actividad');
+      const tipo = document.getElementById('dataType');
+      const destino = document.getElementById('destinoSelect');
+
+      document.getElementById('resumenPais').textContent = pais.options[pais.selectedIndex]?.text || '—';
+      document.getElementById('resumenActividad').textContent = actividad.options[actividad.selectedIndex]?.text || '—';
+      document.getElementById('resumenTipo').textContent = tipo.options[tipo.selectedIndex]?.text || '—';
+
+      if (destino && destino.selectedIndex > 0) {
+        document.getElementById('resumenDestino').textContent = destino.options[destino.selectedIndex]?.text?.split(' (Inst')[0] || '—';
+      } else {
+        document.getElementById('resumenDestino').textContent = '—';
+      }
+    }
+
+    // Actualizar pasos del stepper
+    function actualizarStepper() {
+      const pais = document.getElementById('country').value;
+      const actividad = document.getElementById('actividad').value;
+      const destino = document.getElementById('destinoSelect')?.value;
+      const archivo = document.getElementById('excelFile').files.length;
+
+      const paso1 = pais && actividad && destino;
+      const paso2 = archivo > 0;
+
+      document.getElementById('step1').classList.toggle('active', !paso1);
+      document.getElementById('step1').classList.toggle('step', true);
+      document.getElementById('step2').classList.toggle('active', paso1 && !paso2);
+      document.getElementById('step3').classList.toggle('active', paso1 && paso2);
+    }
+
+    // Eventos de cambio
+    ['country', 'actividad', 'dataType', 'pesquisaType'].forEach(id => {
+      document.getElementById(id).addEventListener('change', actualizarResumen);
+    });
+    ['country', 'actividad'].forEach(id => {
+      document.getElementById(id).addEventListener('change', actualizarStepper);
+    });
+
+    document.getElementById('excelFile').addEventListener('change', function() {
+      const fileName = document.getElementById('fileName');
+      if (this.files.length) {
+        fileName.textContent = '📄 ' + this.files[0].name;
+        fileName.classList.remove('d-none');
+      } else {
+        fileName.classList.add('d-none');
+      }
+      actualizarStepper();
+    });
+
+    // Mostrar/ocultar subtipo de pesquisa
     document.getElementById('dataType').addEventListener('change', function () {
       const group = document.getElementById('pesquisaTypeGroup');
       group.style.display = (this.value === 'pesquisas') ? 'block' : 'none';
+      actualizarResumen();
     });
 
     // Cargar destinos según actividad
@@ -260,8 +658,8 @@
         const response = await fetch(`/api/opciones?pais=${pais}&actividad=${actividad}`);
         const data = await response.json();
 
-        let html = `<label for="busqueda-select" class="form-label">Selecciona ${actividad}</label>`;
-        html += `<select class="form-select" id="destinoSelect" name="destino" required >`;
+        let html = `<label class="form-label">Selecciona ${actividad} *</label>`;
+        html += `<select class="form-select" id="destinoSelect" name="destino" required>`;
         html += `<option value="">-- Seleccionar --</option>`;
 
         data.forEach(item => {
@@ -270,38 +668,53 @@
 
         html += `</select>`;
         document.getElementById('destinoContainer').innerHTML = html;
-          // Activar Select2 después de insertar el select
+
         $('#destinoSelect').select2({
           placeholder: "-- Seleccionar --",
           allowClear: true,
           width: '100%'
         });
+
+        $('#destinoSelect').on('change', function() {
+          actualizarResumen();
+          actualizarStepper();
+        });
+
+        actualizarResumen();
+        actualizarStepper();
       }
     });
-  
-  </script>
 
-  <script>
+    // Enviar formulario
     document.getElementById('uploadForm').addEventListener('submit', async function (e) {
       e.preventDefault();
       const feedback = document.getElementById('feedback');
-      feedback.innerHTML = '<div class="alert alert-info">Procesando...</div>';
+      const btnCargar = document.getElementById('btnCargar');
 
-      const formData = new FormData();
       const pais = document.getElementById('country').value;
       const actividad = document.getElementById('actividad').value;
       const tipoCarga = document.getElementById('dataType').value;
       const pesquisaType = document.getElementById('pesquisaType').value;
       const destinoSelect = document.getElementById('destinoSelect');
       const destinoId = destinoSelect ? destinoSelect.value : null;
-      const institucionId = destinoSelect ? destinoSelect.options[destinoSelect.selectedIndex].text.match(/Inst: (\d+)/)?.[1] : null;
+      const institucionId = destinoSelect ? destinoSelect.options[destinoSelect.selectedIndex]?.text?.match(/Inst: (\d+)/)?.[1] : null;
       const fileInput = document.getElementById('excelFile');
 
       if (!destinoId || !institucionId) {
-        feedback.innerHTML = '<div class="alert alert-danger">Debe seleccionar un destino válido.</div>';
+        feedback.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Debe seleccionar un destino válido.</div>';
         return;
       }
 
+      if (!fileInput.files.length) {
+        feedback.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Selecciona un archivo Excel antes de continuar.</div>';
+        return;
+      }
+
+      btnCargar.disabled = true;
+      btnCargar.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
+      feedback.innerHTML = '<div class="alert alert-info"><i class="bi bi-hourglass-split me-2"></i>Procesando archivo, por favor espera...</div>';
+
+      const formData = new FormData();
       formData.append('file', fileInput.files[0]);
       formData.append('pais', pais);
       formData.append('actividad', actividad);
@@ -316,13 +729,19 @@
         if (pesquisaType === "antropometria") {
           endpoint = "/api/cargar_excel_pesquisa_antropometrica";
         } else if (pesquisaType === "sanguineo") {
-          endpoint = "/api/cargar_excel_pesquisa_sanguineo";  // futuro
+          endpoint = "/api/cargar_excel_pesquisa_sanguineo";
+        } else if (pesquisaType === "vitales") {
+          endpoint = "/api/cargar_excel_vitales";
         } else {
-          feedback.innerHTML = '<div class="alert alert-danger">Debe seleccionar el tipo de pesquisa.</div>';
+          feedback.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Debe seleccionar el tipo de pesquisa.</div>';
+          btnCargar.disabled = false;
+          btnCargar.innerHTML = '<i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar';
           return;
         }
       } else {
-        feedback.innerHTML = '<div class="alert alert-danger">Debe seleccionar el tipo de carga.</div>';
+        feedback.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Debe seleccionar el tipo de carga.</div>';
+        btnCargar.disabled = false;
+        btnCargar.innerHTML = '<i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar';
         return;
       }
 
@@ -335,11 +754,11 @@
         const result = await response.json();
 
         if (result.status === 'ok') {
-          let html = `<div class="alert alert-success"><strong>Carga exitosa.</strong><br>`;
+          let html = `<div class="alert alert-success"><strong><i class="bi bi-check-circle me-2"></i>Carga exitosa.</strong><br>`;
 
           if (tipoCarga === "beneficiarios") {
             html += `Personas: ${result.insertados.personas_nuevas}<br>
-                     Pacientes: ${result.insertados.pacientes_asociados }<br>
+                     Pacientes: ${result.insertados.pacientes_asociados}<br>
                      Escolaridades: ${result.insertados.escolaridades}<br>
                      Autorizaciones: ${result.insertados.autorizaciones}<br>
                      Familiares: ${result.insertados.familiares}`;
@@ -350,7 +769,7 @@
           html += `</div>`;
 
           if (result.errores && result.errores.length > 0) {
-            html += `<div class="alert alert-warning"><strong>Advertencias:</strong><ul>`;
+            html += `<div class="alert alert-warning"><strong><i class="bi bi-exclamation-triangle me-2"></i>Advertencias:</strong><ul class="mb-0">`;
             result.errores.forEach(item => {
               html += `<li>${item}</li>`;
             });
@@ -359,15 +778,15 @@
 
           feedback.innerHTML = html;
         } else {
-          feedback.innerHTML = `<div class="alert alert-danger">Error: ${result.mensaje}</div>`;
+          feedback.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error: ${result.mensaje}</div>`;
         }
       } catch (error) {
-        feedback.innerHTML = `<div class="alert alert-danger">Error inesperado: ${error.message}</div>`;
+        feedback.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error inesperado: ${error.message}</div>`;
+      } finally {
+        btnCargar.disabled = false;
+        btnCargar.innerHTML = '<i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar';
       }
     });
   </script>
-    <footer class="text-white text-center py-3 mt-auto">
-      © Copyright 2025. Derechos reservados.
-    </footer>
 </body>
 </html>
