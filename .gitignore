@@ -13,3 +13,4 @@ Thumbs.db
 # Ignorar carpetas de compilación o build
 dist/
 build/sql/VE20260827.sql
+ 

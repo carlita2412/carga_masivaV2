@@ -363,7 +363,11 @@
       <div class="results-text">Ordenadas por ID reciente</div>
     </div>
 
- 
+
+
+    {% if jornadas %}
+
+
     <div class="table-responsive">
       <table class="table align-middle">
         <thead>
@@ -403,7 +407,19 @@
     <div class="table-footer">
       <div class="results-text">Mostrando {{ jornadas|length }} jornada{{ 's' if jornadas|length != 1 }}</div>
     </div>
+
  
+
+
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-calendar-x"></i>
+      <div class="fw-bold mb-1">No se encontraron jornadas</div>
+      <div>Ajusta los filtros de búsqueda o estatus.</div>
+    </div>
+    {% endif %}
+
+
   </section>
 </div>
 
@@ -477,9 +493,16 @@ function cambiarStatus(id, p, actual) {
 
 document.addEventListener("DOMContentLoaded", () => {
   // Enviar acción del modal
+
  
   document.getElementById("jornadaModalAceptar").addEventListener("click", () => {
  
+
+
+  document.getElementById("jornadaModalAceptar").addEventListener("click", function() {
+
+  document.getElementById("jornadaModalAceptar").addEventListener("click", () => {
+
     const formData = new FormData();
     formData.append("accion", accion);
     formData.append("jornada_id", jornadaId);
@@ -519,7 +542,15 @@ document.addEventListener("DOMContentLoaded", () => {
     bootstrap.Modal.getInstance(document.getElementById("jornadaModal")).hide();
   });
 
+
  
+
+
+  document.getElementById("modalInputField").addEventListener("input", function() {
+    this.classList.remove("is-invalid");
+  });
+
+
   // Búsqueda automática después de 4 caracteres
   const buscarInput = document.getElementById("buscar");
   let debounceTimer;

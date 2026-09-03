@@ -243,6 +243,41 @@
       background:#fff8f7;
     }
 
+
+    .dropzone.dragover{
+      border-color:var(--ds-coral);
+      background:#fff1f0;
+      transform:scale(1.005);
+    }
+
+    .dropzone.has-file{
+      border-style:solid;
+      border-color:#8fd3a8;
+      background:#f5fdf8;
+    }
+
+    .file-name .bi-x-circle-fill{
+      cursor:pointer;
+      margin-left:8px;
+    }
+
+    .step.done{
+      border-color:#bde5cd;
+      background:#f5fdf8;
+      color:#18864b;
+    }
+
+    .step.done .step-number{
+      background:#18864b;
+      color:#fff;
+    }
+
+    .scroll-list{
+      max-height:220px;
+      overflow-y:auto;
+    }
+
+
     .dropzone .icon{
       width:54px;height:54px;border-radius:14px;
       display:grid;place-items:center;
@@ -531,10 +566,13 @@
             <label class="dropzone w-100" for="excelFile" id="dropzoneLabel">
               <div class="icon"><i class="bi bi-cloud-arrow-up"></i></div>
 
+
               <div class="fw-bold">Arrastra tu archivo Excel aquí</div>
               <div class="helper mt-1">o haz clic para seleccionarlo desde tu equipo</div>
 
-            
+
+   
+
               <div class="helper mt-2">Formatos permitidos: .xlsx y .xls</div>
               <div id="fileName" class="file-name d-none"></div>
             </label>
@@ -552,9 +590,11 @@
                 Antes de cargar, revisaremos estructura y campos obligatorios.
               </div>
 
+
               <button type="submit" class="btn btn-load" id="btnCargar">
                 <i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar
               </button>
+
 
             </div>
 
@@ -633,6 +673,42 @@
       document.getElementById(id).addEventListener('change', actualizarStepper);
     });
 
+    const dropzone = document.getElementById('dropzoneLabel');
+    const excelFileInput = document.getElementById('excelFile');
+    const dropzoneTitle = document.getElementById('dropzoneTitle');
+    const dropzoneHelperText = document.getElementById('dropzoneHelperText');
+
+    document.getElementById('excelFile').addEventListener('change', function() {
+      const fileName = document.getElementById('fileName');
+      if (this.files.length) {
+        fileName.textContent = '📄 ' + this.files[0].name;
+        fileName.classList.remove('d-none');
+      } else {
+        fileName.classList.add('d-none');
+
+
+    function asignarArchivo(file) {
+      const feedback = document.getElementById('feedback');
+      const extension = file.name.split('.').pop().toLowerCase();
+
+      if (!['xlsx', 'xls'].includes(extension)) {
+        feedback.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle me-2"></i>Solo se permiten archivos .xlsx o .xls.</div>';
+        return;
+      }
+
+      feedback.innerHTML = '';
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+      excelFileInput.files = dataTransfer.files;
+      mostrarArchivoSeleccionado(file);
+      actualizarStepper();
+    }
+
+    excelFileInput.addEventListener('change', function() {
+      if (this.files.length) {
+        mostrarArchivoSeleccionado(this.files[0]);
+      } else {
+        mostrarArchivoSeleccionado(null);
 
     document.getElementById('excelFile').addEventListener('change', function() {
       const fileName = document.getElementById('fileName');
@@ -807,8 +883,6 @@
 
           if (result.errores && result.errores.length > 0) {
 
-            html += `<div class="alert alert-warning"><strong><i class="bi bi-exclamation-triangle me-2"></i>Advertencias:</strong><ul class="mb-0">`;
-
             result.errores.forEach(item => {
               html += `<li>${item}</li>`;
             });
@@ -820,6 +894,7 @@
         } else {
 
           feedback.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error: ${result.mensaje}</div>`;
+
 
         }
         feedback.scrollIntoView({ behavior: 'smooth', block: 'start' });
