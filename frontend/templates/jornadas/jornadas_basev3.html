@@ -363,6 +363,7 @@
       <div class="results-text">Ordenadas por ID reciente</div>
     </div>
 
+ 
     <div class="table-responsive">
       <table class="table align-middle">
         <thead>
@@ -402,6 +403,7 @@
     <div class="table-footer">
       <div class="results-text">Mostrando {{ jornadas|length }} jornada{{ 's' if jornadas|length != 1 }}</div>
     </div>
+ 
   </section>
 </div>
 
@@ -475,17 +477,28 @@ function cambiarStatus(id, p, actual) {
 
 document.addEventListener("DOMContentLoaded", () => {
   // Enviar acción del modal
+ 
   document.getElementById("jornadaModalAceptar").addEventListener("click", () => {
+ 
     const formData = new FormData();
     formData.append("accion", accion);
     formData.append("jornada_id", jornadaId);
     formData.append("pais", paisValue);
 
     if (accion === "editar-nombre") {
-      formData.append("nuevo_nombre", document.getElementById("modalInputField").value);
+      const nombre = document.getElementById("modalInputField").value.trim();
+      if (!nombre) {
+        document.getElementById("modalInputField").classList.add("is-invalid");
+        return;
+      }
+      formData.append("nuevo_nombre", nombre);
     } else if (accion === "cambiar-status") {
       formData.append("nuevo_status", document.getElementById("modalStatusSelect").value);
     }
+
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
 
     fetch("/jornadas/v2/accion", {
       method: "POST",
@@ -497,11 +510,16 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         location.reload();
       }
+    }).catch(() => {
+      mostrarToast("No se pudo guardar el cambio.", "error");
+      btn.disabled = false;
+      btn.innerHTML = "Guardar cambios";
     });
 
     bootstrap.Modal.getInstance(document.getElementById("jornadaModal")).hide();
   });
 
+ 
   // Búsqueda automática después de 4 caracteres
   const buscarInput = document.getElementById("buscar");
   let debounceTimer;

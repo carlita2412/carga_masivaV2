@@ -530,8 +530,11 @@
 
             <label class="dropzone w-100" for="excelFile" id="dropzoneLabel">
               <div class="icon"><i class="bi bi-cloud-arrow-up"></i></div>
+
               <div class="fw-bold">Arrastra tu archivo Excel aquí</div>
               <div class="helper mt-1">o haz clic para seleccionarlo desde tu equipo</div>
+
+            
               <div class="helper mt-2">Formatos permitidos: .xlsx y .xls</div>
               <div id="fileName" class="file-name d-none"></div>
             </label>
@@ -548,9 +551,11 @@
                 <i class="bi bi-check2-circle me-1"></i>
                 Antes de cargar, revisaremos estructura y campos obligatorios.
               </div>
+
               <button type="submit" class="btn btn-load" id="btnCargar">
                 <i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar
               </button>
+
             </div>
 
             <!-- Feedback -->
@@ -628,6 +633,7 @@
       document.getElementById(id).addEventListener('change', actualizarStepper);
     });
 
+
     document.getElementById('excelFile').addEventListener('change', function() {
       const fileName = document.getElementById('fileName');
       if (this.files.length) {
@@ -635,9 +641,34 @@
         fileName.classList.remove('d-none');
       } else {
         fileName.classList.add('d-none');
+
       }
       actualizarStepper();
     });
+
+
+    ['dragenter', 'dragover'].forEach(evt => {
+      dropzone.addEventListener(evt, function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(evt => {
+      dropzone.addEventListener(evt, function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('dragover');
+      });
+    });
+
+    dropzone.addEventListener('drop', function(e) {
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        asignarArchivo(e.dataTransfer.files[0]);
+      }
+    });
+
 
     // Mostrar/ocultar subtipo de pesquisa
     document.getElementById('dataType').addEventListener('change', function () {
@@ -768,8 +799,16 @@
 
           html += `</div>`;
 
+          if (result.duplicados && result.duplicados.length > 0) {
+            html += `<div class="alert alert-warning"><strong><i class="bi bi-info-circle me-2"></i>Registros ya existentes (omitidos):</strong><ul class="mb-0 scroll-list">`;
+            result.duplicados.forEach(item => { html += `<li>${item}</li>`; });
+            html += `</ul></div>`;
+          }
+
           if (result.errores && result.errores.length > 0) {
+
             html += `<div class="alert alert-warning"><strong><i class="bi bi-exclamation-triangle me-2"></i>Advertencias:</strong><ul class="mb-0">`;
+
             result.errores.forEach(item => {
               html += `<li>${item}</li>`;
             });
@@ -777,15 +816,63 @@
           }
 
           feedback.innerHTML = html;
+          marcarCargaCompletada();
         } else {
+
           feedback.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error: ${result.mensaje}</div>`;
+
         }
+        feedback.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (error) {
         feedback.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error inesperado: ${error.message}</div>`;
+
       } finally {
         btnCargar.disabled = false;
         btnCargar.innerHTML = '<i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar';
       }
+    });
+
+    // Al completar una carga con éxito: marcar pasos, ofrecer reiniciar sin recargar la página
+    function marcarCargaCompletada() {
+      document.getElementById('step1').classList.remove('active');
+      document.getElementById('step1').classList.add('done');
+      document.getElementById('step2').classList.remove('active');
+      document.getElementById('step2').classList.add('done');
+      document.getElementById('step3').classList.remove('active');
+      document.getElementById('step3').classList.add('done');
+      document.getElementById('step4').classList.add('active');
+
+      document.getElementById('btnCargar').classList.add('d-none');
+      document.getElementById('btnNuevaCarga').classList.remove('d-none');
+
+      document.querySelectorAll('#uploadForm select, #uploadForm input').forEach(el => el.disabled = true);
+    }
+
+    document.getElementById('btnNuevaCarga').addEventListener('click', function() {
+      const form = document.getElementById('uploadForm');
+      form.reset();
+      document.querySelectorAll('#uploadForm select, #uploadForm input').forEach(el => el.disabled = false);
+
+      document.getElementById('destinoContainer').innerHTML = `
+        <label class="form-label">Selecciona destino *</label>
+        <select class="form-select" disabled>
+          <option>Primero selecciona país y actividad</option>
+        </select>`;
+      document.getElementById('pesquisaTypeGroup').style.display = 'none';
+      mostrarArchivoSeleccionado(null);
+      document.getElementById('feedback').innerHTML = '';
+
+      ['step1', 'step2', 'step3', 'step4'].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.remove('done', 'active');
+      });
+      document.getElementById('step1').classList.add('active');
+
+      this.classList.add('d-none');
+      document.getElementById('btnCargar').classList.remove('d-none');
+
+      actualizarResumen();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   </script>
 </body>

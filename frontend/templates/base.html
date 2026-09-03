@@ -7,140 +7,311 @@
 
   <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
+
   <style>
-    body {
-      overflow-x: hidden;
-      background-color: #f8f9fa;
+    :root{
+      --ds-coral:#ff5c57;
+      --ds-orange:#f5a623;
+      --ds-ink:#263244;
+      --ds-muted:#667085;
+      --ds-border:#e4e7ec;
+      --ds-bg:#f7f9fc;
+      --ds-sidebar:#2d3748;
     }
 
-    #sidebar {
-      width: 250px;
-      background-color: #2D3748 !important;
-      color: white;
-      position: fixed;
-      top: 0;
-      bottom: 0;
-      left: 0;
-      padding-top: 56px;
-      transition: transform 0.3s ease;
+    *{box-sizing:border-box}
+
+    body{
+      margin:0;
+      overflow-x:hidden;
+      background:var(--ds-bg);
+      color:var(--ds-ink);
+      font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+      min-height:100vh;
     }
 
-    #sidebar.hidden {
-      transform: translateX(-100%);
+    /* Topbar */
+    .topbar{
+      min-height:64px;
+      background:linear-gradient(90deg,var(--ds-coral),var(--ds-orange));
+      box-shadow:0 3px 16px rgba(16,24,40,.10);
     }
 
-    #sidebar a {
-      display: block;
-      color: white;
-      padding: 12px 20px;
-      text-decoration: none;
+    .brand{
+      font-weight:800;
+      letter-spacing:.02em;
+      color:#fff;
+      text-decoration:none;
+      font-size:1.1rem;
     }
 
-    #sidebar a:hover {
-      background-color: #70757b;
+    .brand:hover{color:#fff}
+
+    .brand .mark{
+      width:38px;height:38px;border-radius:10px;
+      display:inline-grid;place-items:center;
+      background:rgba(255,255,255,.18);
+      margin-right:.65rem;
+      font-size:1.1rem;
+      overflow:hidden;
     }
 
-    .topbar {
-      background: linear-gradient(to right, #f45d4c, #ffa736);
-      height: 56px;
+    .brand .mark img{height:24px;width:auto}
+
+    .user-chip{
+      display:inline-flex;
+      align-items:center;
+      gap:.55rem;
+      background:#fff;
+      color:var(--ds-ink);
+      border-radius:999px;
+      padding:.45rem .8rem;
+      font-size:.9rem;
+      box-shadow:0 2px 8px rgba(16,24,40,.08);
+      text-decoration:none;
     }
 
-    .main-content {
-      margin-left: 250px;
-      padding: 70px 20px 20px;
+    .hamburger{
+      font-size:22px;
+      background:none;
+      border:none;
+      color:#fff;
+      cursor:pointer;
+      padding:4px 8px;
+      line-height:1;
     }
 
-    .hamburger {
-      font-size: 24px;
-      background: none;
-      border: none;
-      color: white;
+    /* Sidebar */
+    .sidebar{
+      width:250px;
+      position:fixed;
+      top:64px;bottom:0;left:0;
+      background:var(--ds-sidebar);
+      padding:22px 14px;
+      overflow-y:auto;
+      z-index:100;
+      transition:transform .3s ease;
     }
 
-    .logo {
-      height: 50px;
+    .sidebar.hidden{transform:translateX(-100%)}
+
+    .sidebar a{
+      display:flex;
+      align-items:center;
+      gap:.75rem;
+      color:#eef2f6;
+      text-decoration:none;
+      border-radius:10px;
+      padding:11px 13px;
+      margin-bottom:5px;
+      font-size:.92rem;
     }
 
-    footer {
-      background-color: #2D3748;
-      color: white;
+    .sidebar a:hover,.sidebar a.active{
+      background:rgba(255,255,255,.10);
+      color:#fff;
     }
 
-    .digisalud-header {
-      background: linear-gradient(to right, #ff4e50, #f9d423);
-      color: white;
-      padding: 20px 0;
-      text-align: center;
+    .sidebar a.active{
+      box-shadow:inset 3px 0 0 var(--ds-coral);
     }
 
-    .digisalud-logo {
-      font-size: 2rem;
-      font-weight: bold;
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
+    .sidebar .sub-link{
+      padding-left:38px;
+      font-size:.85rem;
+      margin-bottom:2px;
+      border-radius:8px;
     }
 
-    .fuente1 {
-      color: #ff4e50;
+    .sidebar .chevron{
+      margin-left:auto;
+      transition:transform .2s ease;
+      font-size:.8rem;
     }
+
+    .sidebar a[aria-expanded="true"] .chevron{
+      transform:rotate(180deg);
+    }
+
+    /* Main + footer */
+    .main-content{
+      margin-left:250px;
+      padding:90px 34px 42px;
+      min-height:calc(100vh - 52px);
+    }
+
+    footer{
+      background:var(--ds-sidebar);
+      color:#c1c9d4;
+      text-align:center;
+      padding:14px;
+      font-size:.85rem;
+      margin-left:250px;
+    }
+
+    @media (max-width:991px){
+      .sidebar{display:none}
+      .sidebar.show{display:block}
+      .main-content{margin-left:0;padding:90px 18px 28px}
+      footer{margin-left:0}
+    }
+
+    /* Shared component styles (used across pages) */
+    .toolbar-card,.table-card{
+      background:#fff;
+      border:1px solid var(--ds-border);
+      border-radius:16px;
+      box-shadow:0 8px 25px rgba(16,24,40,.05);
+    }
+
+    .toolbar-card{padding:20px;margin-top:24px}
+
+    .form-label{
+      font-size:.86rem;
+      font-weight:700;
+      color:#344054;
+      margin-bottom:.42rem;
+    }
+
+    .form-control,.form-select{
+      min-height:44px;
+      border-radius:10px;
+      border-color:#d0d5dd;
+    }
+
+    .form-control:focus,.form-select:focus{
+      border-color:#ff9a95;
+      box-shadow:0 0 0 .2rem rgba(255,92,87,.12);
+    }
+
+    .btn-filter{
+      min-height:44px;
+      border-radius:10px;
+      border:0;
+      background:var(--ds-coral);
+      color:#fff;
+      font-weight:700;
+      padding:0 18px;
+    }
+
+    .btn-filter:hover{color:#fff;filter:brightness(.98)}
+
+    .btn-clear{
+      min-height:44px;
+      border-radius:10px;
+      border:1px solid #d0d5dd;
+      background:#fff;
+      color:#475467;
+      font-weight:700;
+      padding:0 16px;
+    }
+
+    .btn-clear:hover{background:#f2f4f7}
+
+    .eyebrow{
+      color:var(--ds-coral);
+      text-transform:uppercase;
+      font-size:.78rem;
+      letter-spacing:.08em;
+      font-weight:800;
+      margin-bottom:4px;
+    }
+
+    .page-title{font-size:1.8rem;font-weight:800;margin:0 0 4px}
+    .page-subtitle{color:var(--ds-muted);margin:0}
+
+    .empty-state{
+      text-align:center;
+      padding:52px 20px;
+      color:var(--ds-muted);
+    }
+
+    .empty-state i{font-size:2.2rem;color:#cbd2dc;margin-bottom:10px;display:block}
+
+    .modal-content{
+      border:0;
+      border-radius:16px;
+      overflow:hidden;
+      box-shadow:0 18px 50px rgba(16,24,40,.18);
+    }
+
+    .modal-header{background:#fff;border-bottom:1px solid var(--ds-border)}
+    .modal-title{font-weight:800}
+    .modal-footer{border-top:1px solid var(--ds-border)}
+
+    .btn-save{
+      background:var(--ds-coral);
+      color:#fff;
+      border:0;
+      border-radius:9px;
+      font-weight:700;
+      padding:.5rem 1.5rem;
+    }
+
+    .btn-save:hover{filter:brightness(.95);color:#fff}
+
+    /* Toasts */
+    .toast-container{z-index:1080}
   </style>
+
+  {% block extra_head %}{% endblock %}
 </head>
-<body class="d-flex flex-column min-vh-100">
+<body>
 
-<header class="digisalud-header">
-  <div class="container">
-    <nav class="navbar topbar fixed-top px-3 d-flex align-items-center">
-      <button class="hamburger me-3" onclick="toggleSidebar()">☰</button>
-      <div class="digisalud-logo">
-        <span class="digisalud-icon">
-          <img src="{{ request.url_for('static', path='img/digisalud.png') }}" alt="DIGISALUD" class="logo">
-        </span>
-      </div>
-    </nav>
+<!-- Topbar -->
+<nav class="navbar topbar fixed-top px-3 px-lg-4">
+  <div class="container-fluid d-flex justify-content-between align-items-center">
+    <div class="d-flex align-items-center gap-3">
+      <button class="hamburger" onclick="toggleSidebar()" aria-label="Alternar menú"><i class="bi bi-list"></i></button>
+      <a class="brand d-flex align-items-center" href="/carga">
+        <span class="mark"><img src="/carga_masiva/static/img/digisalud.png" alt="DIGISALUD"></span>
+        DIGISALUD
+      </a>
+    </div>
+    <a href="/logout" class="user-chip">
+      <i class="bi bi-person-circle"></i>
+      {{ usuario if usuario else 'Mi cuenta' }}
+    </a>
   </div>
-</header> 
+</nav>
 
-<div id="sidebar" class="hidden">
-  <a href="/carga">Inicio</a>
-  <a href="/carga">Carga Masiva</a>
-      <!--<a href="#">Reportes</a>-->
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <a href="/carga"><i class="bi bi-house-door"></i> Inicio</a>
+  <a href="/carga"><i class="bi bi-cloud-arrow-up"></i> Carga masiva</a>
 
-       <!-- JRORNADAS (Desplegable) -->
-<!-- Jornadas (Desplegable) -->
-<a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuJornadas" role="button">
-  <i class="bi bi-calendar-event text-white"></i> Jornadas
-  <span class="ms-2">▼</span>
-</a>
-<div class="collapse ps-3" id="submenuJornadas">
-  <a href="/jornadas/v2">Gestionar Jornadas</a>
-</div>
-
-    <!-- Usuarios (Desplegable) -->
- 
-<a  class="d-flex justify-content-between align-items-center"  href="/usuarios/v2" ><i class="bi bi-person-gear"></i>Gestionar Usuarios</a>
-  
-
-  <a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuDescargas" role="button">
-   <i class="bi bi-download"></i> Descargas <span class="ms-2">▼</span>
+  <a class="d-flex align-items-center" data-bs-toggle="collapse" href="#submenuJornadas" role="button" aria-expanded="false">
+    <i class="bi bi-calendar-event"></i>&nbsp; Jornadas
+    <i class="bi bi-chevron-down chevron"></i>
   </a>
-  <div class="collapse ps-3" id="submenuDescargas">
-    <a href="/carga_masiva/descargas/beneficiario" download>Plantilla Beneficiario</a>
-    <a href="/carga_masiva/descargas/antropometria" download>Plantilla Antropometría</a>
-    <a href="/carga_masiva/descargas/sanguineo" download>Plantilla Sanguíneo</a>
-    <a href="/carga_masiva/descargas/manual" download>Manual de Usuario</a>
+  <div class="collapse" id="submenuJornadas">
+    <a href="/jornadas/v2" class="sub-link">Gestionar Jornadas</a>
   </div>
 
-  <a href="/logout"><i class="bi bi-power"></i> Cerrar sesión</a>
-</div>
+  <a href="/usuarios/v2"><i class="bi bi-people"></i> Gestionar usuarios</a>
+
+  <a class="d-flex align-items-center" data-bs-toggle="collapse" href="#submenuDescargas" role="button" aria-expanded="false">
+    <i class="bi bi-download"></i>&nbsp; Descargas
+    <i class="bi bi-chevron-down chevron"></i>
+  </a>
+  <div class="collapse" id="submenuDescargas">
+    <a href="/carga_masiva/descargas/beneficiario" download class="sub-link">Plantilla Beneficiario</a>
+    <a href="/carga_masiva/descargas/antropometria" download class="sub-link">Plantilla Antropometría</a>
+    <a href="/carga_masiva/descargas/sanguineo" download class="sub-link">Plantilla Sanguíneo</a>
+    <a href="/carga_masiva/descargas/vitales" download class="sub-link">Plantilla Vitales</a>
+    <a href="/carga_masiva/descargas/manual" download class="sub-link">Manual de Usuario</a>
+  </div>
+
+  <a href="/logout" class="mt-3"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a>
+</aside>
 
 <div class="main-content" id="mainContent">
   {% block content %}{% endblock %}
 </div>
 
-<footer class="text-white text-center py-3 mt-auto">
-  © Copyright 2025. Derechos reservados.
+<footer>
+  &copy; Copyright 2025. Derechos reservados.
 </footer>
 
 <!-- Bootstrap Bundle -->
@@ -148,27 +319,56 @@
 <script>
   function toggleSidebar() {
     const sidebar = document.getElementById("sidebar");
-    const mainContent = document.getElementById("mainContent");
-
     sidebar.classList.toggle("hidden");
-    mainContent.classList.toggle("expanded");
+    sidebar.classList.toggle("show");
   }
+
+  // Marca como activo el enlace de la sección actual
+  document.addEventListener("DOMContentLoaded", () => {
+    const path = window.location.pathname;
+    document.querySelectorAll(".sidebar > a[href]").forEach(a => {
+      const href = a.getAttribute("href");
+      if (href && href !== "/logout" && path.startsWith(href)) {
+        a.classList.add("active");
+      }
+    });
+  });
 </script>
 
+<!-- Toasts (reemplaza a window.alert para feedback no bloqueante) -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="appToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="appToastBody">Mensaje</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+<script>
+  function mostrarToast(mensaje, tipo) {
+    tipo = tipo || 'success';
+    const toastEl = document.getElementById('appToast');
+    const body = document.getElementById('appToastBody');
+    toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-info');
+    toastEl.classList.add(tipo === 'error' ? 'text-bg-danger' : (tipo === 'info' ? 'text-bg-info' : 'text-bg-success'));
+    body.textContent = mensaje;
+    new bootstrap.Toast(toastEl, { delay: 3500 }).show();
+  }
+</script>
 
 <!-- Modal de éxito -->
 <div class="modal fade" id="successModal" tabindex="-1" aria-labelledby="successModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-danger">
-      <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title" id="successModalLabel">Éxito</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="successModalLabel"><i class="bi bi-check-circle-fill text-success me-2"></i>Listo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
       </div>
       <div class="modal-body" id="modalMessage">
         <!-- Mensaje dinámico -->
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-danger" data-bs-dismiss="modal" onclick="location.reload()">Aceptar</button>
+        <button type="button" class="btn btn-save" data-bs-dismiss="modal" onclick="location.reload()">Aceptar</button>
       </div>
     </div>
   </div>
@@ -177,24 +377,59 @@
 <!-- Modal genérico para actualizar datos -->
 <div class="modal fade" id="inputModal" tabindex="-1" aria-labelledby="inputModalLabel" aria-hidden="true">
   <div class="modal-dialog">
-    <div class="modal-content border-info">
-      <div class="modal-header bg-info text-white">
+    <div class="modal-content">
+      <div class="modal-header">
         <h5 class="modal-title" id="inputModalLabel">Actualizar dato</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
       </div>
       <div class="modal-body">
         <input type="text" id="inputModalField" class="form-control" placeholder="">
+        <div class="form-text text-danger d-none" id="inputModalError">Este campo es obligatorio.</div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-info" id="inputModalAceptar">Aceptar</button>
+        <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-save" id="inputModalAceptar">Aceptar</button>
       </div>
     </div>
   </div>
 </div>
 
+<!-- Modal de confirmación genérico (reemplaza confirm() nativo) -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmModalLabel"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Confirmar acción</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body" id="confirmModalMessage">
+        ¿Deseas continuar?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="confirmModalAceptar">Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  function confirmarAccion(mensaje, onConfirm) {
+    document.getElementById('confirmModalMessage').textContent = mensaje;
+    const modalEl = document.getElementById('confirmModal');
+    const modal = new bootstrap.Modal(modalEl);
+    const btn = document.getElementById('confirmModalAceptar');
 
+    const nuevoBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(nuevoBtn, btn);
 
+    nuevoBtn.addEventListener('click', () => {
+      modal.hide();
+      onConfirm();
+    });
+
+    modal.show();
+  }
+</script>
 
 <script>
   window.onpageshow = function(event) {

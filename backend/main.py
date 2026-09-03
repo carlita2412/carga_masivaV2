@@ -860,6 +860,7 @@ async def gestion_usuarios_v2(
 
     return templates.TemplateResponse("usuarios/acciones_basev3.html", {
         "request": request,
+        "usuario": usuario,
         "pais": pais,
         "organizaciones": organizaciones,
         "usuarios": usuarios,
@@ -961,6 +962,7 @@ async def gestion_jornadas_v2(
 
     return templates.TemplateResponse("jornadas/jornadas_basev3.html", {
         "request": request,
+        "usuario": usuario,
         "pais": pais,
         "buscar": buscar,
         "estatus": estatus,
