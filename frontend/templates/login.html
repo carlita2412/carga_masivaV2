@@ -109,7 +109,7 @@
     <main>
     <div class="login-container text-center">
 
-        <img src="/carga_masiva/static/img/digisalud.png" alt="DIGISALUD" class="logo-img">
+        <img src="{{ request.url_for('static', path='img/digisalud.png') }}" alt="DIGISALUD" class="logo-img">
         <h4 class="mb-1 fw-bold" style="color:var(--ds-ink)">Bienvenido</h4>
         <p class="login-subtitle">Ingresa tus credenciales para acceder al sistema</p>
 

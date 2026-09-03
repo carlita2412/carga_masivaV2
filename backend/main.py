@@ -26,7 +26,7 @@ app = FastAPI(root_path="/carga_masiva")
 # Plantillas y estáticos
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "frontend/templates"))
-app.mount("/carga_masiva/static", StaticFiles(directory="frontend/static"), name="static")
+app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 
 # Middleware CORS
 app.add_middleware(
