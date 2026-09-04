@@ -565,14 +565,8 @@
 
             <label class="dropzone w-100" for="excelFile" id="dropzoneLabel">
               <div class="icon"><i class="bi bi-cloud-arrow-up"></i></div>
-
-
-              <div class="fw-bold">Arrastra tu archivo Excel aquí</div>
-              <div class="helper mt-1">o haz clic para seleccionarlo desde tu equipo</div>
-
-
-   
-
+              <div class="fw-bold" id="dropzoneTitle">Arrastra tu archivo Excel aquí</div>
+              <div class="helper mt-1" id="dropzoneHelperText">o haz clic para seleccionarlo desde tu equipo</div>
               <div class="helper mt-2">Formatos permitidos: .xlsx y .xls</div>
               <div id="fileName" class="file-name d-none"></div>
             </label>
@@ -591,11 +585,14 @@
               </div>
 
 
-              <button type="submit" class="btn btn-load" id="btnCargar">
-                <i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar
-              </button>
-
-
+              <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary d-none" id="btnNuevaCarga">
+                  <i class="bi bi-arrow-counterclockwise me-2"></i> Nueva carga
+                </button>
+                <button type="submit" class="btn btn-load" id="btnCargar">
+                  <i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar
+                </button>
+              </div>
             </div>
 
             <!-- Feedback -->
@@ -678,14 +675,36 @@
     const dropzoneTitle = document.getElementById('dropzoneTitle');
     const dropzoneHelperText = document.getElementById('dropzoneHelperText');
 
-    document.getElementById('excelFile').addEventListener('change', function() {
+    function formatBytes(bytes) {
+      if (!bytes) return '0 KB';
+      const kb = bytes / 1024;
+      return kb > 1024 ? (kb / 1024).toFixed(1) + ' MB' : Math.round(kb) + ' KB';
+    }
+
+    function mostrarArchivoSeleccionado(file) {
       const fileName = document.getElementById('fileName');
-      if (this.files.length) {
-        fileName.textContent = '📄 ' + this.files[0].name;
+      if (file) {
+        fileName.innerHTML = `<i class="bi bi-file-earmark-check-fill text-success"></i> ${file.name} <span class="helper">(${formatBytes(file.size)})</span> <i class="bi bi-x-circle-fill text-danger" id="quitarArchivo" title="Quitar archivo"></i>`;
         fileName.classList.remove('d-none');
+        dropzoneTitle.textContent = 'Archivo listo para cargar';
+        dropzoneHelperText.textContent = 'Haz clic para reemplazarlo';
+        dropzone.classList.add('has-file');
+
+        document.getElementById('quitarArchivo').addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          excelFileInput.value = '';
+          mostrarArchivoSeleccionado(null);
+          actualizarStepper();
+        });
       } else {
         fileName.classList.add('d-none');
-
+        fileName.innerHTML = '';
+        dropzoneTitle.textContent = 'Arrastra tu archivo Excel aquí';
+        dropzoneHelperText.textContent = 'o haz clic para seleccionarlo desde tu equipo';
+        dropzone.classList.remove('has-file');
+      }
+    }
 
     function asignarArchivo(file) {
       const feedback = document.getElementById('feedback');
@@ -709,19 +728,9 @@
         mostrarArchivoSeleccionado(this.files[0]);
       } else {
         mostrarArchivoSeleccionado(null);
-
-    document.getElementById('excelFile').addEventListener('change', function() {
-      const fileName = document.getElementById('fileName');
-      if (this.files.length) {
-        fileName.textContent = '📄 ' + this.files[0].name;
-        fileName.classList.remove('d-none');
-      } else {
-        fileName.classList.add('d-none');
-
       }
       actualizarStepper();
     });
-
 
     ['dragenter', 'dragover'].forEach(evt => {
       dropzone.addEventListener(evt, function(e) {
@@ -753,16 +762,36 @@
       actualizarResumen();
     });
 
-    // Cargar destinos según actividad
+    // Cargar destinos según país y actividad
     const actividadSelect = document.getElementById('actividad');
     const paisSelect = document.getElementById('country');
 
-    actividadSelect.addEventListener('change', async () => {
+    function resetDestino(mensaje) {
+      document.getElementById('destinoContainer').innerHTML = `
+        <label class="form-label">Selecciona destino *</label>
+        <select class="form-select" disabled>
+          <option>${mensaje}</option>
+        </select>`;
+      actualizarResumen();
+      actualizarStepper();
+    }
+
+    async function cargarDestinos() {
       const pais = paisSelect.value;
       const actividad = actividadSelect.value;
 
-      if (pais && actividad) {
+      if (!pais || !actividad) {
+        resetDestino('Primero selecciona país y actividad');
+        return;
+      }
+
+      resetDestino('Cargando opciones...');
+
+      try {
         const response = await fetch(`/api/opciones?pais=${pais}&actividad=${actividad}`);
+        if (!response.ok) {
+          throw new Error('No se pudieron cargar las opciones.');
+        }
         const data = await response.json();
 
         let html = `<label class="form-label">Selecciona ${actividad} *</label>`;
@@ -789,8 +818,13 @@
 
         actualizarResumen();
         actualizarStepper();
+      } catch (err) {
+        resetDestino('Error al cargar opciones, intenta de nuevo');
       }
-    });
+    }
+
+    paisSelect.addEventListener('change', cargarDestinos);
+    actividadSelect.addEventListener('change', cargarDestinos);
 
     // Enviar formulario
     document.getElementById('uploadForm').addEventListener('submit', async function (e) {
@@ -882,7 +916,7 @@
           }
 
           if (result.errores && result.errores.length > 0) {
-
+            html += `<div class="alert alert-warning"><strong><i class="bi bi-exclamation-triangle me-2"></i>Advertencias:</strong><ul class="mb-0 scroll-list">`;
             result.errores.forEach(item => {
               html += `<li>${item}</li>`;
             });
@@ -892,15 +926,20 @@
           feedback.innerHTML = html;
           marcarCargaCompletada();
         } else {
+          let html = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i><strong>Error:</strong> ${result.mensaje}</div>`;
 
-          feedback.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error: ${result.mensaje}</div>`;
+          if (result.errores && result.errores.length > 0) {
+            html += `<div class="alert alert-danger"><strong><i class="bi bi-list-ul me-2"></i>Detalle:</strong><ul class="mb-0 scroll-list">`;
+            result.errores.forEach(item => { html += `<li>${item}</li>`; });
+            html += `</ul></div>`;
+          }
 
-
+          feedback.innerHTML = html;
         }
         feedback.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } catch (error) {
         feedback.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle me-2"></i>Error inesperado: ${error.message}</div>`;
-
+        feedback.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } finally {
         btnCargar.disabled = false;
         btnCargar.innerHTML = '<i class="bi bi-cloud-arrow-up me-2"></i> Validar y cargar';
