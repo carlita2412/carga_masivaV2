@@ -441,6 +441,7 @@
       <a href="/carga_masiva/descargas/beneficiario" download class="sub-link">Plantilla Beneficiario</a>
       <a href="/carga_masiva/descargas/antropometria" download class="sub-link">Plantilla Antropometría</a>
       <a href="/carga_masiva/descargas/sanguineo" download class="sub-link">Plantilla Sanguíneo</a>
+      <a href="/carga_masiva/descargas/sanguineo_avanzado" download class="sub-link">Plantilla Sanguíneo Avanzado</a>
       <a href="/carga_masiva/descargas/vitales" download class="sub-link">Plantilla Vitales</a>
       <a href="/carga_masiva/descargas/manual" download class="sub-link">Manual de Usuario</a>
     </div>
@@ -463,6 +464,7 @@
           <a href="/carga_masiva/descargas/beneficiario" download class="mini-link"><i class="bi bi-file-earmark-arrow-down me-1"></i> Plantilla Beneficiarios</a>
           <a href="/carga_masiva/descargas/antropometria" download class="mini-link"><i class="bi bi-file-earmark-arrow-down me-1"></i> Plantilla Antropometría</a>
           <a href="/carga_masiva/descargas/sanguineo" download class="mini-link"><i class="bi bi-file-earmark-arrow-down me-1"></i> Plantilla Sanguíneo</a>
+          <a href="/carga_masiva/descargas/sanguineo_avanzado" download class="mini-link"><i class="bi bi-file-earmark-arrow-down me-1"></i> Plantilla Sanguíneo Avanzado</a>
           <a href="/carga_masiva/descargas/vitales" download class="mini-link"><i class="bi bi-file-earmark-arrow-down me-1"></i> Plantilla Vitales</a>
         </div>
       </div>
@@ -554,6 +556,7 @@
                     <option value="">-- Seleccionar --</option>
                     <option value="antropometria">Antropometría</option>
                     <option value="sanguineo">Sanguíneo</option>
+                    <option value="sanguineo_avanzado">Sanguíneo Avanzado</option>
                     <option value="vitales">Vitales</option>
                   </select>
                 </div>
@@ -871,6 +874,8 @@
           endpoint = "/api/cargar_excel_pesquisa_antropometrica";
         } else if (pesquisaType === "sanguineo") {
           endpoint = "/api/cargar_excel_pesquisa_sanguineo";
+        } else if (pesquisaType === "sanguineo_avanzado") {
+          endpoint = "/api/cargar_excel_pesquisa_sanguineo_avanzada";
         } else if (pesquisaType === "vitales") {
           endpoint = "/api/cargar_excel_vitales";
         } else {

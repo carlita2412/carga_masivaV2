@@ -18,6 +18,7 @@ from backend.db.queries import (
 )
 from backend.services.carga_pesquisas import procesar_excel_pesquisa_antropometrica
 from backend.services.carga_pesquisa_sanguineo import procesar_excel_pesquisa_sanguineo
+from backend.services.carga_pesquisa_sanguineo_avanzada import procesar_excel_pesquisa_sanguineo_avanzada
 from backend.services.carga_vitales import procesar_excel_vitales
 
 app = FastAPI(root_path="/carga_masiva")
@@ -697,6 +698,66 @@ async def cargar_excel_pesquisa_sanguineo(
 
     except Exception as e:
         return {"status": "error", "mensaje": str(e)}
+
+
+#CARGA PESQUISA SANGUINEO AVANZADA
+
+@app.post("/api/cargar_excel_pesquisa_sanguineo_avanzada")
+async def cargar_excel_pesquisa_sanguineo_avanzada(
+    file: UploadFile = File(...),
+    pais: str = Form(...),
+    actividad: str = Form(...),
+    destino_id: int = Form(...)
+):
+    try:
+        actividad = actividad.lower().strip()
+
+        content = await file.read()
+        df = pd.read_excel(BytesIO(content), sheet_name="MAESTRO", header=0)
+        df.columns = df.columns.str.strip()
+
+        columnas_necesarias = ["id_digisalud", "Fecha_Ingreso"]
+        for col in columnas_necesarias:
+            if col not in df.columns:
+                return {"status": "error", "mensaje": f"Falta columna: {col}"}
+
+        resultado = procesar_excel_pesquisa_sanguineo_avanzada(df, pais, actividad, destino_id)
+
+        conn = get_connection(pais)
+        cursor = conn.cursor()
+
+        tabla = "psi_pesquisas_x_paciente" if actividad == "jornada" else "psi_pesquisas_x_centro"
+        id_campo = "jornada_id" if actividad == "jornada" else "centro_id"
+
+        for item in resultado["pesquisas"]:
+            sql = f"""
+                INSERT INTO {tabla} (
+                    persona_id, {id_campo}, tipo_pesquisa_id, pesq_x_pac_valor,
+                    pesq_x_pac_fecha_evauacion, control_usuario_creacion, control_fecha_creacion
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, CURDATE())
+            """
+            data = (
+                item["persona_id"],
+                item[id_campo],
+                item["tipo_pesquisa_id"],
+                item["pesquisa_valor"],
+                item["fecha"],
+                1522702145282  # Usuario fijo o reemplazable
+            )
+            cursor.execute(sql, data)
+
+        conn.commit()
+        conn.close()
+
+        return {
+            "status": "ok",
+            "insertados": len(resultado["pesquisas"]),
+            "errores": resultado["errores"]
+        }
+
+    except Exception as e:
+        return {"status": "error", "mensaje": str(e)}
 #CARGA VITALES
 
 @app.post("/api/cargar_excel_vitales")
@@ -789,6 +850,12 @@ def descargar_antropometria():
 def descargar_sanguineo():
     ruta = BASE_DIR  / "plantillas" / "CargaMasiva_Pesquisa_Sanguineo.xlsx"
     return FileResponse(path=ruta, filename="Plantilla_Sanguineo.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.get("/descargas/sanguineo_avanzado", response_class=FileResponse)
+def descargar_sanguineo_avanzado():
+    ruta = BASE_DIR  / "plantillas" / "CargaMasiva_Pesquisa_Sanguineo_Avanzada.xlsx"
+    return FileResponse(path=ruta, filename="Plantilla_Sanguineo_Avanzada.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.get("/descargas/manual", response_class=FileResponse)
