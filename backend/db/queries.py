@@ -1,5 +1,14 @@
 # backend/db/queries.py
 
+import logging
+
+# Logger dedicado para inserciones en BD. Nunca se debe loguear el dict/tupla
+# completo de datos aquí: contiene PII de salud (nombre, cédula, fecha de
+# nacimiento, dirección). Solo se registran identificadores no sensibles
+# (persona_id, tabla destino, rowcount) para poder auditar sin exponer datos.
+logger = logging.getLogger("carga_masiva.db")
+
+
 def insertar_persona(cursor, persona: dict):
     def clean(val):
         import pandas as pd
@@ -32,9 +41,9 @@ def insertar_persona(cursor, persona: dict):
         clean(persona.get("persona_direccion_punto_referencia"))
     )
 
-    print("Insertando persona:", datos)
+    logger.debug("Insertando persona_id=%s", persona["persona_id"])
     cursor.execute(sql, datos)
-    print("rowcount persona:", cursor.rowcount)
+    logger.debug("Persona insertada persona_id=%s rowcount=%s", persona["persona_id"], cursor.rowcount)
 
 
 def insertar_paciente(cursor, paciente: dict, actividad: str):
@@ -63,9 +72,9 @@ def insertar_paciente(cursor, paciente: dict, actividad: str):
         paciente["control_usuario_creacion"]
     )
 
-    print("Insertando en", tabla, ":", datos)
+    logger.debug("Insertando en %s persona_id=%s", tabla, paciente["persona_id"])
     cursor.execute(sql, datos)
-    print("Fila afectada:", cursor.rowcount)
+    logger.debug("Insertado en %s persona_id=%s rowcount=%s", tabla, paciente["persona_id"], cursor.rowcount)
 
 
 def insertar_escolaridad(cursor, esc: dict, actividad: str):
@@ -94,9 +103,9 @@ def insertar_escolaridad(cursor, esc: dict, actividad: str):
         esc.get("escolaridad_escuela"),
     )
 
-    print("Insertando en psi_escolaridad:", datos)
+    logger.debug("Insertando en %s persona_id=%s", tabla, esc["persona_id"])
     cursor.execute(sql, datos)
-    print("Filas afectadas escolaridad:", cursor.rowcount)
+    logger.debug("Insertado en %s persona_id=%s rowcount=%s", tabla, esc["persona_id"], cursor.rowcount)
 
 
 def insertar_autorizacion(cursor, auto: dict, actividad: str):
@@ -115,7 +124,7 @@ def insertar_autorizacion(cursor, auto: dict, actividad: str):
         auto["autorizacion_id"]
     )
 
-    print("Insertando en psi_aut_pac:", datos)
+    logger.debug("Insertando en %s persona_id=%s autorizacion_id=%s", tabla, auto["persona_id"], auto["autorizacion_id"])
     cursor.execute(sql, datos)
 
 
@@ -134,5 +143,5 @@ def insertar_familiar(cursor, fam: dict):
         fam["familiar_status"]
     )
 
-    print("Insertando en psi_familiares:", datos)
+    logger.debug("Insertando en psi_familiares persona_id_A=%s persona_id_B=%s", fam["persona_id_A"], fam["persona_id_B"])
     cursor.execute(sql, datos)

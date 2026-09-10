@@ -3,7 +3,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse,FileR
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 import hashlib
+import hmac
+import logging
+import os
+import secrets
+import time
+import bcrypt
 import pandas as pd
 from io import BytesIO
 from pathlib import Path
@@ -29,16 +36,192 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "frontend/templates"))
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 
-# Middleware CORS
+# ---------------------------------------------------
+# LÍMITE DE TAMAÑO DE ARCHIVOS SUBIDOS
+# Los Excel de carga masiva no deberían superar unos pocos MB; un archivo
+# gigante (accidental o deliberado) puede agotar la memoria del proceso al
+# pasar por pandas/openpyxl. Configurable vía variable de entorno.
+# NOTA: esta validación es defensa en profundidad a nivel de aplicación.
+# El límite "duro" y confiable debe fijarse también en el reverse proxy
+# (ej. `client_max_body_size` en Nginx), ya que un cliente puede mentir
+# sobre el header Content-Length.
+# ---------------------------------------------------
+MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "20"))
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+
+class LimiteTamanoSubidaMiddleware(BaseHTTPMiddleware):
+    """Rechaza tempranamente, por Content-Length, los POST de carga de Excel
+    que declaren un tamaño mayor al permitido. No sustituye el límite del
+    reverse proxy, pero evita que un Content-Length honesto llegue a pandas."""
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method == "POST" and request.url.path.startswith("/api/cargar_excel"):
+            content_length = request.headers.get("content-length")
+            if content_length:
+                try:
+                    declarado = int(content_length)
+                except ValueError:
+                    declarado = None
+                # Margen para el overhead propio del multipart/form-data
+                if declarado is not None and declarado > MAX_UPLOAD_SIZE_BYTES + (256 * 1024):
+                    return JSONResponse(
+                        status_code=413,
+                        content={
+                            "status": "error",
+                            "mensaje": f"El archivo supera el tamaño máximo permitido ({MAX_UPLOAD_SIZE_MB} MB)."
+                        }
+                    )
+        return await call_next(request)
+
+
+app.add_middleware(LimiteTamanoSubidaMiddleware)
+
+# ---------------------------------------------------
+# CORS
+# Esta es una app server-rendered (Jinja2): el frontend y la API viven en el
+# mismo origen, y las peticiones normales del navegador (formularios, fetch
+# desde el propio HTML servido por esta app) no requieren CORS en absoluto
+# —CORS solo entra en juego si un origen *distinto* intenta leer la
+# respuesta vía JS—. No hay ningún consumidor externo conocido, así que por
+# defecto no se permite ningún origen cruzado. Si en el futuro se necesita
+# exponer la API a otro dominio, agregarlo explícitamente vía la variable de
+# entorno CORS_ALLOWED_ORIGINS (lista separada por comas, con protocolo,
+# ej. "https://midominio.com,https://otro.midominio.com"). Nunca usar "*".
+# ---------------------------------------------------
+CORS_ALLOWED_ORIGINS = [
+    origen.strip() for origen in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origen.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Ajusta esto en producción
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
-# Sesiones temporales en memoria
+EXTENSIONES_EXCEL_VALIDAS = (".xlsx", ".xls")
+# Firmas de archivo (magic bytes): .xlsx es un ZIP, .xls (formato antiguo) es OLE Compound File.
+FIRMAS_EXCEL_VALIDAS = (b"PK\x03\x04", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
+
+
+def _validar_archivo_excel(file: UploadFile, content: bytes):
+    """Valida extensión, tamaño y firma binaria del archivo subido.
+    Devuelve un mensaje de error (str) si es inválido, o None si está OK."""
+    nombre = (file.filename or "").lower()
+    if not nombre.endswith(EXTENSIONES_EXCEL_VALIDAS):
+        return "El archivo debe tener extensión .xlsx o .xls"
+
+    if len(content) > MAX_UPLOAD_SIZE_BYTES:
+        return f"El archivo supera el tamaño máximo permitido ({MAX_UPLOAD_SIZE_MB} MB)."
+
+    if not content:
+        return "El archivo está vacío."
+
+    if not content.startswith(FIRMAS_EXCEL_VALIDAS):
+        return "El archivo no parece ser un Excel válido (.xlsx/.xls)."
+
+    return None
+
+# Sesiones temporales en memoria.
+# Cada valor es {"username": ..., "user_id": ..., "expira": epoch_seconds}
 SESSIONS = {}
+SESSION_TTL_SEGUNDOS = 8 * 60 * 60  # 8 horas de sesión
+
+# Valores permitidos para "actividad": se usan para construir nombres de
+# tabla/columna en SQL dinámico, por lo que NUNCA deben aceptarse tal cual
+# vengan del cliente sin pasar por esta whitelist.
+ACTIVIDADES_VALIDAS = {"jornada", "centro"}
+
+
+# ---------------------------------------------------
+# HASHING DE CONTRASEÑAS
+# Los usuarios existentes tienen su contraseña en SHA1 (heredado). Nuevas
+# contraseñas y cualquier login exitoso con hash legado se migran a bcrypt
+# de forma transparente.
+# ---------------------------------------------------
+
+def _hash_password_bcrypt(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _es_hash_bcrypt(valor: str) -> bool:
+    return bool(valor) and valor.startswith(("$2a$", "$2b$", "$2y$"))
+
+
+def _password_coincide(password: str, hash_almacenado: str) -> bool:
+    """Verifica el password contra el hash almacenado, soportando bcrypt y
+    el legado SHA1 (comparación en tiempo constante)."""
+    if not hash_almacenado:
+        return False
+    if _es_hash_bcrypt(hash_almacenado):
+        try:
+            return bcrypt.checkpw(password.encode("utf-8"), hash_almacenado.encode("utf-8"))
+        except ValueError:
+            return False
+    # Hash legado SHA1
+    sha1_calculado = hashlib.sha1(password.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(sha1_calculado, hash_almacenado)
+
+
+# ---------------------------------------------------
+# SESIONES
+# ---------------------------------------------------
+
+def _crear_sesion(user_id, username: str) -> str:
+    """Genera un token de sesión aleatorio (no predecible) y lo registra."""
+    token = secrets.token_urlsafe(32)
+    SESSIONS[token] = {
+        "username": username,
+        "user_id": user_id,
+        "expira": time.time() + SESSION_TTL_SEGUNDOS,
+    }
+    return token
+
+
+def _usuario_autenticado(request: Request):
+    """Devuelve el username de la sesión activa, o None si no hay sesión
+    válida o si expiró (en cuyo caso también la elimina)."""
+    session_token = request.cookies.get("session")
+    if not session_token:
+        return None
+
+    sesion = SESSIONS.get(session_token)
+    if not sesion:
+        return None
+
+    if time.time() > sesion["expira"]:
+        SESSIONS.pop(session_token, None)
+        return None
+
+    return sesion["username"]
+
+
+def _respuesta_no_autenticado():
+    return JSONResponse(status_code=401, content={"status": "error", "mensaje": "No autenticado"})
+
+
+def _respuesta_actividad_invalida():
+    return JSONResponse(
+        status_code=400,
+        content={"status": "error", "mensaje": "Actividad no válida. Debe ser 'jornada' o 'centro'."}
+    )
+
+
+# ---------------------------------------------------
+# MANEJO DE ERRORES INESPERADOS
+# El detalle completo de la excepción (que puede incluir fragmentos de SQL,
+# nombres de tabla/columna, rutas internas, etc.) se registra solo en el log
+# del servidor. Al cliente se le devuelve un mensaje genérico, para no
+# facilitar reconocimiento de la infraestructura interna (CWE-209).
+# ---------------------------------------------------
+logger = logging.getLogger("carga_masiva.api")
+MENSAJE_ERROR_GENERICO = "Ocurrió un error al procesar el archivo. Contacte al administrador del sistema."
+
+
+def _log_y_responder_error(e: Exception, contexto: str):
+    logger.exception("Error inesperado en %s", contexto)
+    return {"status": "error", "mensaje": MENSAJE_ERROR_GENERICO}
 
 # ---------------------------------------------------
 # RUTAS DE LOGIN Y SESIÓN
@@ -46,8 +229,7 @@ SESSIONS = {}
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    session_token = request.cookies.get("session")
-    if session_token and session_token in SESSIONS:
+    if _usuario_autenticado(request):
         return RedirectResponse(url="/carga", status_code=302)
     return RedirectResponse(url="/login", status_code=302)
 
@@ -57,23 +239,31 @@ async def show_login(request: Request):
 
 @app.post("/login")
 async def login(request: Request, username: str = Form(...), password: str = Form(...)):
-    hashed_password = hashlib.sha1(password.encode()).hexdigest()
     conn = get_connection("vzla")
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT usuario_id FROM psi_usuarios 
-        WHERE usuario_username = %s 
-          AND usuario_password = %s 
-          AND usuario_status = 0 
+        SELECT usuario_id, usuario_password FROM psi_usuarios
+        WHERE usuario_username = %s
+          AND usuario_status = 0
           AND usuario_organizacion_id = 5
-    """, (username, hashed_password))
+    """, (username,))
     result = cursor.fetchone()
-    conn.close()
 
-    if result:
-        user_id = result[0]
-        session_token = f"token-{user_id}"
-        SESSIONS[session_token] = username
+    if result and _password_coincide(password, result[1]):
+        user_id, hash_almacenado = result
+
+        # Migración transparente de contraseñas legadas (SHA1) a bcrypt.
+        if not _es_hash_bcrypt(hash_almacenado):
+            nuevo_hash = _hash_password_bcrypt(password)
+            cursor.execute(
+                "UPDATE psi_usuarios SET usuario_password = %s WHERE usuario_id = %s",
+                (nuevo_hash, user_id)
+            )
+            conn.commit()
+
+        conn.close()
+
+        session_token = _crear_sesion(user_id, username)
 
         response = RedirectResponse(url="/carga", status_code=302)
         response.set_cookie(
@@ -85,6 +275,7 @@ async def login(request: Request, username: str = Form(...), password: str = For
         )
         return response
 
+    conn.close()
     return templates.TemplateResponse("login.html", {
         "request": request,
         "error": "Credenciales incorrectas"
@@ -101,9 +292,8 @@ async def logout(request: Request):
 
 @app.get("/carga", response_class=HTMLResponse)
 async def carga_masiva(request: Request):
-    session_token = request.cookies.get("session")
-    usuario = SESSIONS.get(session_token)
-    if not session_token or not usuario:
+    usuario = _usuario_autenticado(request)
+    if not usuario:
         return RedirectResponse(url="/login", status_code=302)
     return templates.TemplateResponse("index.html", {"request": request, "usuario": usuario})
 
@@ -112,7 +302,14 @@ async def carga_masiva(request: Request):
 # ---------------------------------------------------
 
 @app.get("/api/opciones")
-async def get_opciones(pais: str = Query(...), actividad: str = Query(...)):
+async def get_opciones(request: Request, pais: str = Query(...), actividad: str = Query(...)):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+
+    actividad = actividad.lower().strip()
+    if actividad not in ACTIVIDADES_VALIDAS:
+        return _respuesta_actividad_invalida()
+
     conn = get_connection(pais)
     cursor = conn.cursor()
 
@@ -141,21 +338,32 @@ async def get_opciones(pais: str = Query(...), actividad: str = Query(...)):
 #carga beneficiarios endpoint
 @app.post("/api/cargar_excel")
 async def cargar_excel(
+    request: Request,
     file: UploadFile = File(...),
     pais: str = Form(...),
     actividad: str = Form(...),
     destino_id: int = Form(...),
     institucion_id: int = Form(...)
 ):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+
     conn = None
     try:
         actividad = actividad.lower().strip()
+        if actividad not in ACTIVIDADES_VALIDAS:
+            return {"status": "error", "mensaje": "Actividad no válida. Debe ser 'jornada' o 'centro'."}
 
         # ---------------------------------------------------------------------
         # Leer Excel
         # header=1 porque la plantilla tiene encabezados en la fila 2
         # ---------------------------------------------------------------------
-        content = await file.read()
+        # Se limita la lectura a MAX_UPLOAD_SIZE_BYTES + 1 para no cargar en
+        # memoria un archivo arbitrariamente grande solo para detectarlo.
+        content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
+        error_archivo = _validar_archivo_excel(file, content)
+        if error_archivo:
+            return {"status": "error", "mensaje": error_archivo}
         df = pd.read_excel(BytesIO(content), header=1)
         df = df.dropna(how='all').reset_index(drop=True)
 
@@ -469,17 +677,12 @@ async def cargar_excel(
         if conn:
             conn.rollback()
 
-        print("ERROR GENERAL EN /api/cargar_excel:", str(e))
-
-        return {
-            "status": "error",
-            "mensaje": str(e)
-        }
+        return _log_y_responder_error(e, "cargar_excel")
 
     finally:
         if conn:
             conn.close()
-#carga antropometria        
+#carga antropometria
 from fastapi import UploadFile, File, Form
 import pandas as pd
 from io import BytesIO
@@ -506,18 +709,29 @@ def es_error_duplicado_mysql(exc: Exception) -> bool:
 
 @app.post("/api/cargar_excel_pesquisa_antropometrica")
 async def cargar_excel_pesquisa_antropometrica(
+    request: Request,
     file: UploadFile = File(...),
     pais: str = Form(...),
     actividad: str = Form(...),
     destino_id: int = Form(...)
 ):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+
     conn = None
     cursor = None
 
     try:
         actividad = actividad.lower().strip()
+        if actividad not in ACTIVIDADES_VALIDAS:
+            return {"status": "error", "mensaje": "Actividad no válida. Debe ser 'jornada' o 'centro'."}
 
-        content = await file.read()
+        # Se limita la lectura a MAX_UPLOAD_SIZE_BYTES + 1 para no cargar en
+        # memoria un archivo arbitrariamente grande solo para detectarlo.
+        content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
+        error_archivo = _validar_archivo_excel(file, content)
+        if error_archivo:
+            return {"status": "error", "mensaje": error_archivo}
         df = pd.read_excel(BytesIO(content), header=1)
 
         columnas_obligatorias = [
@@ -622,10 +836,7 @@ async def cargar_excel_pesquisa_antropometrica(
         if conn:
             conn.rollback()
 
-        return {
-            "status": "error",
-            "mensaje": str(e)
-        }
+        return _log_y_responder_error(e, "cargar_excel_pesquisa_antropometrica")
 
     finally:
         try:
@@ -643,15 +854,26 @@ async def cargar_excel_pesquisa_antropometrica(
 
 @app.post("/api/cargar_excel_pesquisa_sanguineo")
 async def cargar_excel_pesquisa_sanguineo(
+    request: Request,
     file: UploadFile = File(...),
     pais: str = Form(...),
     actividad: str = Form(...),
     destino_id: int = Form(...)
 ):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+
     try:
         actividad = actividad.lower().strip()
+        if actividad not in ACTIVIDADES_VALIDAS:
+            return {"status": "error", "mensaje": "Actividad no válida. Debe ser 'jornada' o 'centro'."}
 
-        content = await file.read()
+        # Se limita la lectura a MAX_UPLOAD_SIZE_BYTES + 1 para no cargar en
+        # memoria un archivo arbitrariamente grande solo para detectarlo.
+        content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
+        error_archivo = _validar_archivo_excel(file, content)
+        if error_archivo:
+            return {"status": "error", "mensaje": error_archivo}
         df = pd.read_excel(BytesIO(content), header=0)
         df.columns = df.columns.str.strip() 
         # Validación de columnas esperadas PASO 1 AGREGAR NUEVA COLUMNA
@@ -697,22 +919,33 @@ async def cargar_excel_pesquisa_sanguineo(
         }
 
     except Exception as e:
-        return {"status": "error", "mensaje": str(e)}
+        return _log_y_responder_error(e, "cargar_excel_pesquisa_sanguineo")
 
 
 #CARGA PESQUISA SANGUINEO AVANZADA
 
 @app.post("/api/cargar_excel_pesquisa_sanguineo_avanzada")
 async def cargar_excel_pesquisa_sanguineo_avanzada(
+    request: Request,
     file: UploadFile = File(...),
     pais: str = Form(...),
     actividad: str = Form(...),
     destino_id: int = Form(...)
 ):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+
     try:
         actividad = actividad.lower().strip()
+        if actividad not in ACTIVIDADES_VALIDAS:
+            return {"status": "error", "mensaje": "Actividad no válida. Debe ser 'jornada' o 'centro'."}
 
-        content = await file.read()
+        # Se limita la lectura a MAX_UPLOAD_SIZE_BYTES + 1 para no cargar en
+        # memoria un archivo arbitrariamente grande solo para detectarlo.
+        content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
+        error_archivo = _validar_archivo_excel(file, content)
+        if error_archivo:
+            return {"status": "error", "mensaje": error_archivo}
         df = pd.read_excel(BytesIO(content), sheet_name="MAESTRO", header=0)
         df.columns = df.columns.str.strip()
 
@@ -757,20 +990,31 @@ async def cargar_excel_pesquisa_sanguineo_avanzada(
         }
 
     except Exception as e:
-        return {"status": "error", "mensaje": str(e)}
+        return _log_y_responder_error(e, "cargar_excel_pesquisa_sanguineo_avanzada")
 #CARGA VITALES
 
 @app.post("/api/cargar_excel_vitales")
 async def cargar_excel_vitales(
+    request: Request,
     file: UploadFile = File(...),
     pais: str = Form(...),
     actividad: str = Form(...),
     destino_id: int = Form(...)
 ):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+
     try:
         actividad = actividad.lower().strip()
+        if actividad not in ACTIVIDADES_VALIDAS:
+            return {"status": "error", "mensaje": "Actividad no válida. Debe ser 'jornada' o 'centro'."}
 
-        content = await file.read()
+        # Se limita la lectura a MAX_UPLOAD_SIZE_BYTES + 1 para no cargar en
+        # memoria un archivo arbitrariamente grande solo para detectarlo.
+        content = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
+        error_archivo = _validar_archivo_excel(file, content)
+        if error_archivo:
+            return {"status": "error", "mensaje": error_archivo}
         df = pd.read_excel(BytesIO(content), header=0)
         df.columns = df.columns.str.strip()
 
@@ -824,7 +1068,7 @@ async def cargar_excel_vitales(
         }
 
     except Exception as e:
-        return {"status": "error", "mensaje": str(e)}
+        return _log_y_responder_error(e, "cargar_excel_vitales")
 
 
 # Rutas de descarga de archivos de plantilla
@@ -878,9 +1122,8 @@ async def gestion_usuarios_v2(
 ):
     
     #   Protección de sesión
-    session_token = request.cookies.get("session")
-    usuario = SESSIONS.get(session_token)
-    if not session_token or not usuario:
+    usuario = _usuario_autenticado(request)
+    if not usuario:
         return RedirectResponse(url="/login", status_code=302)
     
 
@@ -894,7 +1137,7 @@ async def gestion_usuarios_v2(
     # Construir base de consulta
     query = """
         SELECT u.usuario_id, u.usuario_nombre, u.usuario_apellido, u.usuario_username,
-               u.usuario_password, u.usuario_status, u.usuario_organizacion_id,
+               u.usuario_status, u.usuario_organizacion_id,
                org.organizacion_nombre
         FROM psi_usuarios u
         LEFT JOIN psi_organizacion org ON u.usuario_organizacion_id = org.organizacion_id
@@ -917,10 +1160,9 @@ async def gestion_usuarios_v2(
         "usuario_nombre": r[1],
         "usuario_apellido": r[2],
         "usuario_username": r[3],
-        "usuario_password": r[4],
-        "usuario_status": r[5],
-        "usuario_organizacion_id": r[6],
-        "organizacion_nombre": r[7],
+        "usuario_status": r[4],
+        "usuario_organizacion_id": r[5],
+        "organizacion_nombre": r[6],
     } for r in cursor.fetchall()]
 
     conn.close()
@@ -945,9 +1187,8 @@ async def accion_usuario_v2(
     nuevo_correo: str = Form(None),
     nueva_contrasena: str = Form(None),
 ):
-    session_token = request.cookies.get("session")
-    usuario = SESSIONS.get(session_token)
-    if not session_token or not usuario:
+    usuario = _usuario_autenticado(request)
+    if not usuario:
         return RedirectResponse(url="/login", status_code=302)
 
     try:
@@ -957,7 +1198,10 @@ async def accion_usuario_v2(
         if accion == "bloquear":
             cursor.execute("UPDATE psi_usuarios SET usuario_status = 22 WHERE usuario_id = %s", (usuario_id,))
         elif accion == "cambiar-contrasena":
-            hashed = hashlib.sha1(nueva_contrasena.encode()).hexdigest()
+            if not nueva_contrasena or len(nueva_contrasena) < 8:
+                conn.close()
+                return RedirectResponse(url=f"/usuarios/v2?pais={pais}&error=1", status_code=303)
+            hashed = _hash_password_bcrypt(nueva_contrasena)
             cursor.execute("UPDATE psi_usuarios SET usuario_password = %s WHERE usuario_id = %s", (hashed, usuario_id))
         elif accion == "cambiar-correo":
             cursor.execute("UPDATE psi_usuarios SET usuario_username = %s WHERE usuario_id = %s", (nuevo_correo, usuario_id))
@@ -981,9 +1225,8 @@ async def gestion_jornadas_v2(
     estatus: int = None
 ):
     # Verificación de sesión
-    session_token = request.cookies.get("session")
-    usuario = SESSIONS.get(session_token)
-    if not session_token or not usuario:
+    usuario = _usuario_autenticado(request)
+    if not usuario:
         return RedirectResponse(url="/login", status_code=302)
 
     conn = get_connection(pais)
@@ -1044,9 +1287,8 @@ async def accion_jornada_v2(
     nuevo_nombre: str = Form(None),
     nuevo_status: int = Form(None)
 ):
-    session_token = request.cookies.get("session")
-    usuario = SESSIONS.get(session_token)
-    if not session_token or not usuario:
+    usuario = _usuario_autenticado(request)
+    if not usuario:
         return RedirectResponse(url="/login", status_code=302)
 
     try:

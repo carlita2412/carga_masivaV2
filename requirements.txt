@@ -6,3 +6,4 @@ pymysql
 openpyxl
 pandas
 python-multipart
+bcrypt

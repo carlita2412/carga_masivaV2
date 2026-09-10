@@ -4,7 +4,18 @@ from backend.db.db_connection import get_connection
 from backend.db.utils import obtener_persona_id_existente
 import pandas as pd
 
+# Whitelist: nunca construir nombres de tabla/columna interpolando
+# "actividad" directamente, ya que ese valor puede venir manipulado del cliente.
+TABLA_ASOCIACION_POR_ACTIVIDAD = {
+    "jornada": ("psi_pacientes_x_jornada", "jornada_id"),
+    "centro": ("psi_pacientes_x_centros", "centro_id"),
+}
+
+
 def procesar_excel_pesquisa_sanguineo(df: pd.DataFrame, pais: str, actividad: str, destino_id: int):
+    if actividad not in TABLA_ASOCIACION_POR_ACTIVIDAD:
+        return {"pesquisas": [], "errores": [f"Actividad no válida: {actividad}"]}
+
     conn = get_connection(pais)
     cursor = conn.cursor()
 
@@ -26,8 +37,7 @@ def procesar_excel_pesquisa_sanguineo(df: pd.DataFrame, pais: str, actividad: st
             continue
 
         # Verificar si el beneficiario está cargado en el centro/jornada destino
-        campo_id = f"{actividad}_id"
-        tabla_asociacion = f"psi_pacientes_x_{actividad}s"
+        tabla_asociacion, campo_id = TABLA_ASOCIACION_POR_ACTIVIDAD[actividad]
         cursor.execute(
             f"SELECT 1 FROM {tabla_asociacion} WHERE persona_id = %s AND {campo_id} = %s",
             (persona_id, destino_id)
