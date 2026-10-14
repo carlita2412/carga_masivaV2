@@ -136,13 +136,15 @@ ACTIVIDADES_VALIDAS = {"jornada", "centro"}
 
 # ---------------------------------------------------
 # HASHING DE CONTRASEÑAS
-# Los usuarios existentes tienen su contraseña en SHA1 (heredado). Nuevas
-# contraseñas y cualquier login exitoso con hash legado se migran a bcrypt
-# de forma transparente.
+# Los usuarios existentes tienen su contraseña en SHA1 (heredado). La
+# verificación soporta SHA1 y bcrypt; el login NO modifica el hash
+# almacenado. Las contraseñas restablecidas desde la gestión de usuarios se
+# guardan en SHA1, que es el formato que espera Digisalud (BD compartida).
 # ---------------------------------------------------
 
-def _hash_password_bcrypt(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+def _hash_password_sha1(password: str) -> str:
+    """Hash que se escribe en psi_usuarios (compartida con Digisalud)."""
+    return hashlib.sha1(password.encode("utf-8")).hexdigest()
 
 
 def _es_hash_bcrypt(valor: str) -> bool:
@@ -150,8 +152,9 @@ def _es_hash_bcrypt(valor: str) -> bool:
 
 
 def _password_coincide(password: str, hash_almacenado: str) -> bool:
-    """Verifica el password contra el hash almacenado, soportando bcrypt y
-    el legado SHA1 (comparación en tiempo constante)."""
+    """Verifica el password contra el hash almacenado: SHA1 (formato de
+    Digisalud) o bcrypt (usuarios que ya fueron migrados por error).
+    Comparación en tiempo constante."""
     if not hash_almacenado:
         return False
     if _es_hash_bcrypt(hash_almacenado):
@@ -159,9 +162,7 @@ def _password_coincide(password: str, hash_almacenado: str) -> bool:
             return bcrypt.checkpw(password.encode("utf-8"), hash_almacenado.encode("utf-8"))
         except ValueError:
             return False
-    # Hash legado SHA1
-    sha1_calculado = hashlib.sha1(password.encode("utf-8")).hexdigest()
-    return hmac.compare_digest(sha1_calculado, hash_almacenado)
+    return hmac.compare_digest(_hash_password_sha1(password), hash_almacenado.strip().lower())
 
 
 # ---------------------------------------------------
@@ -250,17 +251,10 @@ async def login(request: Request, username: str = Form(...), password: str = For
     result = cursor.fetchone()
 
     if result and _password_coincide(password, result[1]):
-        user_id, hash_almacenado = result
+        user_id = result[0]
 
-        # Migración transparente de contraseñas legadas (SHA1) a bcrypt.
-        if not _es_hash_bcrypt(hash_almacenado):
-            nuevo_hash = _hash_password_bcrypt(password)
-            cursor.execute(
-                "UPDATE psi_usuarios SET usuario_password = %s WHERE usuario_id = %s",
-                (nuevo_hash, user_id)
-            )
-            conn.commit()
-
+        # No se re-hashea el password en el login: psi_usuarios es compartida
+        # con otros sistemas que validan SHA1, y migrar aquí los dejaba fuera.
         conn.close()
 
         session_token = _crear_sesion(user_id, username)
@@ -1201,7 +1195,7 @@ async def accion_usuario_v2(
             if not nueva_contrasena or len(nueva_contrasena) < 8:
                 conn.close()
                 return RedirectResponse(url=f"/usuarios/v2?pais={pais}&error=1", status_code=303)
-            hashed = _hash_password_bcrypt(nueva_contrasena)
+            hashed = _hash_password_sha1(nueva_contrasena)
             cursor.execute("UPDATE psi_usuarios SET usuario_password = %s WHERE usuario_id = %s", (hashed, usuario_id))
         elif accion == "cambiar-correo":
             cursor.execute("UPDATE psi_usuarios SET usuario_username = %s WHERE usuario_id = %s", (nuevo_correo, usuario_id))
