@@ -9,7 +9,7 @@ templates = Jinja2Templates(directory="frontend/templates")
 
 @auth_router.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
 
 @auth_router.post("/login")
 async def login_submit(
@@ -38,12 +38,12 @@ async def login_submit(
             response.set_cookie(key="usuario", value=username, httponly=True)
             return response
         else:
-            return templates.TemplateResponse("login.html", {
+            return templates.TemplateResponse(request, "login.html", {
                 "request": request,
                 "error": "Credenciales inválidas o sin autorización"
             })
     except Exception as e:
-        return templates.TemplateResponse("login.html", {
+        return templates.TemplateResponse(request, "login.html", {
             "request": request,
             "error": f"Error: {str(e)}"
         })

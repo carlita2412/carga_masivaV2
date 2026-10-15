@@ -18,7 +18,7 @@ from pathlib import Path
 from backend.db.db_connection import get_connection
 from pymysql.err import IntegrityError
 from backend.db.utils import obtener_persona_id_existente, existe_persona_por_id
-from backend.services.carga_beneficiario import procesar_excel
+from backend.services.carga_beneficiario import procesar_excel, generar_id_digisalud, obtener_cabecera
 from backend.db.queries import (
     insertar_persona, insertar_paciente, insertar_escolaridad,
     insertar_autorizacion, insertar_familiar
@@ -236,11 +236,18 @@ async def root(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 async def show_login(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html", {"request": request})
 
 @app.post("/login")
 async def login(request: Request, username: str = Form(...), password: str = Form(...)):
-    conn = get_connection("vzla")
+    try:
+        conn = get_connection("vzla")
+    except Exception:
+        logger.exception("No se pudo conectar a la base de datos en el login")
+        return templates.TemplateResponse(request, "login.html", {
+            "request": request,
+            "error": "No se pudo conectar a la base de datos. Contacte al administrador del sistema."
+        }, status_code=503)
     cursor = conn.cursor()
     cursor.execute("""
         SELECT usuario_id, usuario_password FROM psi_usuarios
@@ -270,7 +277,7 @@ async def login(request: Request, username: str = Form(...), password: str = For
         return response
 
     conn.close()
-    return templates.TemplateResponse("login.html", {
+    return templates.TemplateResponse(request, "login.html", {
         "request": request,
         "error": "Credenciales incorrectas"
     })
@@ -289,7 +296,7 @@ async def carga_masiva(request: Request):
     usuario = _usuario_autenticado(request)
     if not usuario:
         return RedirectResponse(url="/login", status_code=302)
-    return templates.TemplateResponse("index.html", {"request": request, "usuario": usuario})
+    return templates.TemplateResponse(request, "index.html", {"request": request, "usuario": usuario})
 
 # ---------------------------------------------------
 # API DE OPCIONES Y CARGAS
@@ -1161,7 +1168,7 @@ async def gestion_usuarios_v2(
 
     conn.close()
 
-    return templates.TemplateResponse("usuarios/acciones_basev3.html", {
+    return templates.TemplateResponse(request, "usuarios/acciones_basev3.html", {
         "request": request,
         "usuario": usuario,
         "pais": pais,
@@ -1211,38 +1218,60 @@ async def accion_usuario_v2(
 
 
 # para jornadas gestion
+OPCIONES_POR_PAGINA_JORNADAS = (10, 20, 50, 0)  # 0 = todas
+
+
 @app.get("/jornadas/v2", response_class=HTMLResponse)
 async def gestion_jornadas_v2(
     request: Request,
     pais: str = "vzla",
     buscar: str = "",
-    estatus: int = None
+    estatus: str = "",
+    por_pagina: int = 10,
+    pagina: int = 1
 ):
     # Verificación de sesión
     usuario = _usuario_autenticado(request)
     if not usuario:
         return RedirectResponse(url="/login", status_code=302)
 
+    if pais not in PAISES_VALIDOS:
+        pais = "vzla"
+    estatus = int(estatus) if estatus.strip().isdigit() else None
+    if por_pagina not in OPCIONES_POR_PAGINA_JORNADAS:
+        por_pagina = 10
+    pagina = max(pagina, 1)
+
     conn = get_connection(pais)
     cursor = conn.cursor()
 
-    # Consulta jornadas
-    query = """
-        SELECT jornada_id, jornada_nombre, jornada_status, jornada_fecha_inicio
-        FROM psi_jornadas
-        WHERE 1 = 1
-    """
+    filtros = " FROM psi_jornadas WHERE 1 = 1"
     params = []
 
     if buscar:
-        query += " AND jornada_nombre LIKE %s"
+        filtros += " AND jornada_nombre LIKE %s"
         params.append(f"%{buscar}%")
 
-    if estatus is not None:
-        query += " AND jornada_status = %s"
-        params.append(estatus)
+    # Los contadores por estatus ignoran el filtro de estatus, para que siempre muestren el panorama completo.
+    cursor.execute("SELECT jornada_status, COUNT(*)" + filtros + " GROUP BY jornada_status", params)
+    conteo_estatus = {r[0]: r[1] for r in cursor.fetchall()}
 
-    query += " ORDER BY jornada_id DESC"
+    if estatus is not None:
+        filtros += " AND jornada_status = %s"
+        params.append(estatus)
+        total = conteo_estatus.get(estatus, 0)
+    else:
+        total = sum(conteo_estatus.values())
+
+    query = "SELECT jornada_id, jornada_nombre, jornada_status, jornada_fecha_inicio" + filtros + " ORDER BY jornada_id DESC"
+    if por_pagina:
+        total_paginas = max((total + por_pagina - 1) // por_pagina, 1)
+        pagina = min(pagina, total_paginas)
+        query += " LIMIT %s OFFSET %s"
+        params.extend([por_pagina, (pagina - 1) * por_pagina])
+    else:
+        total_paginas = 1
+        pagina = 1
     cursor.execute(query, params)
     jornadas = []
     estatus_dict = {
@@ -1264,13 +1293,19 @@ async def gestion_jornadas_v2(
 
     conn.close()
 
-    return templates.TemplateResponse("jornadas/jornadas_basev3.html", {
+    return templates.TemplateResponse(request, "jornadas/jornadas_basev3.html", {
         "request": request,
         "usuario": usuario,
         "pais": pais,
         "buscar": buscar,
         "estatus": estatus,
-        "jornadas": jornadas
+        "jornadas": jornadas,
+        "conteo_estatus": conteo_estatus,
+        "total": total,
+        "por_pagina": por_pagina,
+        "opciones_por_pagina": OPCIONES_POR_PAGINA_JORNADAS,
+        "pagina": pagina,
+        "total_paginas": total_paginas,
     })
 @app.post("/jornadas/v2/accion")
 async def accion_jornada_v2(
@@ -1311,3 +1346,449 @@ async def accion_jornada_v2(
             url=f"/jornadas/v2?pais={pais}&error=1",
             status_code=303
         )
+
+
+# ---------------------------------------------------
+# GESTIÓN DE BENEFICIARIOS
+# Un beneficiario pertenece a las organizaciones dueñas de las jornadas o
+# centros donde fue atendido (no al usuario que lo creó: la carga masiva crea
+# todo con un usuario de Digisalud).
+# ---------------------------------------------------
+from datetime import date, datetime as _dt
+
+PAISES_VALIDOS = {"vzla", "colombia", "elsalvador"}
+ORGANIZACION_DIGISALUD_ID = 5
+BENEFICIARIOS_POR_PAGINA = 50
+SEXOS_VALIDOS = {"M", "F"}
+
+
+def _fecha_iso(valor):
+    if isinstance(valor, (date, _dt)):
+        return valor.strftime("%Y-%m-%d")
+    if not valor:
+        return ""
+    try:
+        return _dt.strptime(str(valor).strip()[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return ""
+
+
+def _error_json(status_code: int, mensaje: str):
+    return JSONResponse(status_code=status_code, content={"status": "error", "mensaje": mensaje})
+
+
+@app.get("/beneficiarios/v2", response_class=HTMLResponse)
+def gestion_beneficiarios_v2(
+    request: Request,
+    pais: str = "vzla",
+    organizacion_id: int = ORGANIZACION_DIGISALUD_ID,
+    buscar: str = "",
+    pagina: int = 1
+):
+    usuario = _usuario_autenticado(request)
+    if not usuario:
+        return RedirectResponse(url="/login", status_code=302)
+
+    if pais not in PAISES_VALIDOS:
+        pais = "vzla"
+    buscar = buscar.strip()
+    pagina = max(pagina, 1)
+
+    conn = get_connection(pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT organizacion_id, organizacion_nombre FROM psi_organizacion "
+            "WHERE organizacion_status = 0 ORDER BY organizacion_nombre"
+        )
+        organizaciones = [{"organizacion_id": r[0], "organizacion_nombre": r[1]} for r in cursor.fetchall()]
+
+        base_from = """
+            FROM psi_personas p
+            INNER JOIN (
+                SELECT pj.persona_id FROM psi_pacientes_x_jornada pj
+                INNER JOIN psi_jornadas j ON j.jornada_id = pj.jornada_id
+                WHERE j.organizacion_id = %s
+                UNION
+                SELECT pc.persona_id FROM psi_pacientes_x_centros pc
+                INNER JOIN psi_centros ce ON ce.centro_id = pc.centro_id
+                WHERE ce.organizacion_id = %s
+            ) org ON org.persona_id = p.persona_id
+            WHERE 1 = 1
+        """
+        params = [organizacion_id, organizacion_id]
+        if buscar:
+            base_from += " AND (p.id_digisalud LIKE %s OR p.persona_nombre LIKE %s OR p.persona_apellido LIKE %s)"
+            like = f"%{buscar}%"
+            params.extend([like, like, like])
+
+        cursor.execute("SELECT COUNT(*) " + base_from, params)
+        total = cursor.fetchone()[0]
+
+        total_paginas = max((total + BENEFICIARIOS_POR_PAGINA - 1) // BENEFICIARIOS_POR_PAGINA, 1)
+        pagina = min(pagina, total_paginas)
+
+        cursor.execute(
+            "SELECT p.persona_id, p.id_digisalud, p.persona_nombre, p.persona_apellido, "
+            "p.persona_sexo, p.persona_fecha_nacimiento "
+            + base_from +
+            " ORDER BY p.persona_id DESC LIMIT %s OFFSET %s",
+            params + [BENEFICIARIOS_POR_PAGINA, (pagina - 1) * BENEFICIARIOS_POR_PAGINA]
+        )
+        beneficiarios = []
+        for r in cursor.fetchall():
+            fecha = _fecha_iso(r[5])
+            beneficiarios.append({
+                "persona_id": str(r[0]),
+                "id_digisalud": r[1] or "",
+                "nombres": r[2] or "",
+                "apellidos": r[3] or "",
+                "sexo": (r[4] or "").strip().upper(),
+                "fecha_nacimiento": fecha,
+                "fecha_nacimiento_str": _dt.strptime(fecha, "%Y-%m-%d").strftime("%d/%m/%Y") if fecha else "",
+            })
+    finally:
+        conn.close()
+
+    return templates.TemplateResponse(request, "beneficiarios/beneficiarios_basev3.html", {
+        "request": request,
+        "usuario": usuario,
+        "pais": pais,
+        "cabecera": obtener_cabecera(pais),
+        "organizaciones": organizaciones,
+        "organizacion_id": organizacion_id,
+        "buscar": buscar,
+        "beneficiarios": beneficiarios,
+        "total": total,
+        "pagina": pagina,
+        "total_paginas": total_paginas,
+    })
+
+
+@app.post("/beneficiarios/v2/editar")
+def editar_beneficiario_v2(
+    request: Request,
+    pais: str = Form(...),
+    persona_id: int = Form(...),
+    nombres: str = Form(...),
+    apellidos: str = Form(""),
+    sexo: str = Form(...),
+    fecha_nacimiento: str = Form(...),
+):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    nombres = " ".join(nombres.split()).upper()
+    apellidos = " ".join(apellidos.split()).upper() or None
+    sexo = sexo.strip().upper()
+
+    if not nombres:
+        return _error_json(400, "Los nombres son obligatorios.")
+    if sexo not in SEXOS_VALIDOS:
+        return _error_json(400, "El sexo debe ser M o F.")
+    try:
+        fecha = _dt.strptime(fecha_nacimiento.strip(), "%Y-%m-%d").date()
+    except ValueError:
+        return _error_json(400, "La fecha de nacimiento no es válida.")
+    if fecha > date.today():
+        return _error_json(400, "La fecha de nacimiento no puede ser futura.")
+    fecha_str = fecha.strftime("%Y-%m-%d")
+
+    conn = get_connection(pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id_digisalud, persona_nombre, persona_apellido, persona_sexo, persona_fecha_nacimiento, "
+            "persona_cedula, persona_cedula_escolar FROM psi_personas WHERE persona_id = %s",
+            (persona_id,)
+        )
+        actual = cursor.fetchone()
+        if not actual:
+            return _error_json(404, "El beneficiario no existe.")
+
+        id_anterior, nom_ant, ape_ant, sexo_ant, fecha_ant, cedula, cedula_escolar = actual
+        sin_cambios = (
+            (nom_ant or "").strip().upper() == nombres
+            and ((ape_ant or "").strip().upper() or None) == apellidos
+            and (sexo_ant or "").strip().upper() == sexo
+            and _fecha_iso(fecha_ant) == fecha_str
+        )
+        if sin_cambios:
+            return {"status": "ok", "mensaje": "No hubo cambios.", "id_digisalud": id_anterior}
+
+        nuevo_id = generar_id_digisalud(nombres, apellidos, sexo, obtener_cabecera(pais), fecha_str)
+
+        # La carga masiva usa el id_digisalud como cédula de respaldo; se mantienen sincronizadas.
+        nueva_cedula = nuevo_id if cedula == id_anterior else cedula
+        nueva_cedula_escolar = nuevo_id if cedula_escolar == id_anterior else cedula_escolar
+
+        if nuevo_id != id_anterior:
+            cursor.execute(
+                "SELECT persona_nombre, persona_apellido FROM psi_personas "
+                "WHERE persona_id <> %s AND (id_digisalud = %s OR persona_cedula = %s OR persona_cedula_escolar = %s) "
+                "LIMIT 1",
+                (persona_id, nuevo_id, nuevo_id, nuevo_id)
+            )
+            duplicado = cursor.fetchone()
+            if duplicado:
+                nombre_dup = " ".join(x for x in duplicado if x)
+                return _error_json(
+                    409,
+                    f"El ID DIGISALUD {nuevo_id} ya existe y pertenece a otro beneficiario ({nombre_dup}). "
+                    "No se guardaron los cambios."
+                )
+
+        cursor.execute(
+            "UPDATE psi_personas SET persona_nombre = %s, persona_apellido = %s, persona_sexo = %s, "
+            "persona_fecha_nacimiento = %s, id_digisalud = %s, persona_cedula = %s, persona_cedula_escolar = %s "
+            "WHERE persona_id = %s",
+            (nombres, apellidos, sexo, fecha_str, nuevo_id, nueva_cedula, nueva_cedula_escolar, persona_id)
+        )
+        conn.commit()
+        logger.info("Beneficiario actualizado persona_id=%s", persona_id)
+        return {"status": "ok", "mensaje": "Beneficiario actualizado.", "id_digisalud": nuevo_id}
+
+    except IntegrityError as e:
+        conn.rollback()
+        if es_error_duplicado_mysql(e):
+            return _error_json(409, "El ID DIGISALUD generado ya existe para otro beneficiario. No se guardaron los cambios.")
+        logger.exception("Error de integridad al editar beneficiario persona_id=%s", persona_id)
+        return _error_json(500, "No se pudo actualizar el beneficiario.")
+    except Exception:
+        conn.rollback()
+        logger.exception("Error al editar beneficiario persona_id=%s", persona_id)
+        return _error_json(500, "No se pudo actualizar el beneficiario.")
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------
+# COPIAR BENEFICIARIOS ENTRE JORNADAS
+# Copia la inscripción (psi_pacientes_x_jornada), las autorizaciones y la
+# escolaridad de los beneficiarios elegidos de una jornada origen a una destino.
+# ---------------------------------------------------
+from pydantic import BaseModel
+
+MAX_BENEFICIARIOS_COPIA = 5000
+
+
+def _user_id_sesion(request: Request):
+    sesion = SESSIONS.get(request.cookies.get("session") or "")
+    return sesion["user_id"] if sesion else None
+
+
+def _placeholders(n: int) -> str:
+    return ", ".join(["%s"] * n)
+
+
+def _institucion_de_jornada(cursor, jornada_id: int):
+    cursor.execute("SELECT institucion_id FROM psi_instituciones_x_jornada WHERE jornada_id = %s", (jornada_id,))
+    filas = cursor.fetchall()
+    return filas[0][0] if len(filas) == 1 else None
+
+
+@app.get("/jornadas/v2/copiar", response_class=HTMLResponse)
+def copiar_beneficiarios_jornadas(request: Request, pais: str = "vzla"):
+    usuario = _usuario_autenticado(request)
+    if not usuario:
+        return RedirectResponse(url="/login", status_code=302)
+    if pais not in PAISES_VALIDOS:
+        pais = "vzla"
+
+    estatus_dict = {0: "Pendiente", 1: "Suspendida", 2: "En marcha", 3: "Finalizada", 4: "Cancelada"}
+    conn = get_connection(pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT j.jornada_id, j.jornada_nombre, j.jornada_status, COALESCE(pj.total, 0)
+            FROM psi_jornadas j
+            LEFT JOIN (
+                SELECT jornada_id, COUNT(*) AS total FROM psi_pacientes_x_jornada GROUP BY jornada_id
+            ) pj ON pj.jornada_id = j.jornada_id
+            ORDER BY j.jornada_id DESC
+        """)
+        jornadas = [{
+            "jornada_id": r[0],
+            "jornada_nombre": r[1] or "",
+            "estatus": estatus_dict.get(r[2], "Desconocido"),
+            "total": r[3],
+        } for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    return templates.TemplateResponse(request, "jornadas/copiar_beneficiarios.html", {
+        "request": request,
+        "usuario": usuario,
+        "pais": pais,
+        "jornadas": jornadas,
+    })
+
+
+@app.get("/api/jornadas/beneficiarios")
+def api_beneficiarios_jornada(request: Request, pais: str, origen_id: int, destino_id: int = 0):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    conn = get_connection(pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT p.persona_id, p.id_digisalud, p.persona_nombre, p.persona_apellido, p.persona_sexo,
+                   p.persona_fecha_nacimiento, e.escolaridad_escuela, e.escolaridad_grado, e.escolaridad_seccion,
+                   (d.persona_id IS NOT NULL) AS ya_en_destino
+            FROM psi_pacientes_x_jornada s
+            INNER JOIN psi_personas p ON p.persona_id = s.persona_id
+            LEFT JOIN psi_escolaridad e ON e.persona_id = s.persona_id AND e.jornada_id = s.jornada_id
+            LEFT JOIN psi_pacientes_x_jornada d ON d.persona_id = s.persona_id AND d.jornada_id = %s
+            WHERE s.jornada_id = %s
+            ORDER BY p.persona_apellido, p.persona_nombre
+        """, (destino_id, origen_id))
+        beneficiarios = []
+        for r in cursor.fetchall():
+            fecha = _fecha_iso(r[5])
+            beneficiarios.append({
+                "persona_id": str(r[0]),
+                "id_digisalud": r[1] or "",
+                "nombres": r[2] or "",
+                "apellidos": r[3] or "",
+                "sexo": (r[4] or "").strip().upper(),
+                "fecha_nacimiento": _dt.strptime(fecha, "%Y-%m-%d").strftime("%d/%m/%Y") if fecha else "",
+                "escuela": r[6] or "",
+                "grado": " ".join(x for x in (r[7], r[8]) if x),
+                "ya_en_destino": bool(r[9]),
+            })
+    finally:
+        conn.close()
+    return {"status": "ok", "beneficiarios": beneficiarios}
+
+
+class CopiaBeneficiariosIn(BaseModel):
+    pais: str
+    origen_id: int
+    destino_id: int
+    persona_ids: list[int]
+
+
+@app.post("/api/jornadas/copiar_beneficiarios")
+def api_copiar_beneficiarios(request: Request, datos: CopiaBeneficiariosIn):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if datos.pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+    if datos.origen_id == datos.destino_id:
+        return _error_json(400, "La jornada origen y la de destino deben ser distintas.")
+    persona_ids = sorted(set(datos.persona_ids))
+    if not persona_ids:
+        return _error_json(400, "Selecciona al menos un beneficiario.")
+    if len(persona_ids) > MAX_BENEFICIARIOS_COPIA:
+        return _error_json(400, f"No se pueden copiar más de {MAX_BENEFICIARIOS_COPIA} beneficiarios a la vez.")
+
+    user_id = _user_id_sesion(request)
+    conn = get_connection(datos.pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT jornada_id FROM psi_jornadas WHERE jornada_id IN (%s, %s)",
+            (datos.origen_id, datos.destino_id)
+        )
+        if len(cursor.fetchall()) != 2:
+            return _error_json(404, "La jornada origen o la de destino no existe.")
+
+        institucion_destino = _institucion_de_jornada(cursor, datos.destino_id)
+        if institucion_destino is None:
+            return _error_json(400, "La jornada destino no tiene una institución asociada (o tiene más de una).")
+
+        ph = _placeholders(len(persona_ids))
+
+        # Solo se copian personas que realmente están en la jornada origen.
+        cursor.execute(
+            f"SELECT persona_id, persona_id_responsable FROM psi_pacientes_x_jornada "
+            f"WHERE jornada_id = %s AND persona_id IN ({ph})",
+            [datos.origen_id] + persona_ids
+        )
+        en_origen = {r[0]: r[1] for r in cursor.fetchall()}
+
+        cursor.execute(
+            f"SELECT persona_id FROM psi_pacientes_x_jornada WHERE jornada_id = %s AND persona_id IN ({ph})",
+            [datos.destino_id] + persona_ids
+        )
+        ya_en_destino = {r[0] for r in cursor.fetchall()}
+
+        a_copiar = [pid for pid in persona_ids if pid in en_origen and pid not in ya_en_destino]
+        no_en_origen = len([pid for pid in persona_ids if pid not in en_origen])
+
+        if not a_copiar:
+            return {
+                "status": "ok",
+                "mensaje": "No había beneficiarios nuevos para copiar.",
+                "copiados": 0, "autorizaciones": 0, "escolaridades": 0,
+                "ya_en_destino": len(ya_en_destino), "no_en_origen": no_en_origen,
+            }
+
+        ph_copiar = _placeholders(len(a_copiar))
+        ahora = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        cursor.executemany(
+            "INSERT INTO psi_pacientes_x_jornada (persona_id, jornada_id, institucion_id, pac_x_jornada_status, "
+            "persona_id_responsable, control_fecha_creacion, control_usuario_creacion) "
+            "VALUES (%s, %s, %s, 0, %s, %s, %s)",
+            [(pid, datos.destino_id, institucion_destino, en_origen[pid], ahora, user_id) for pid in a_copiar]
+        )
+
+        cursor.execute(
+            f"SELECT persona_id, autorizacion_id FROM psi_aut_pac_x_jornada "
+            f"WHERE jornada_id = %s AND persona_id IN ({ph_copiar})",
+            [datos.origen_id] + a_copiar
+        )
+        autorizaciones = [(r[0], datos.destino_id, r[1]) for r in cursor.fetchall()]
+        if autorizaciones:
+            cursor.executemany(
+                "INSERT INTO psi_aut_pac_x_jornada (persona_id, jornada_id, autorizacion_id) VALUES (%s, %s, %s)",
+                autorizaciones
+            )
+
+        cursor.execute(
+            f"SELECT persona_id, escolaridad_grado, escolaridad_seccion, escolaridad_turno, escolaridad_escuela "
+            f"FROM psi_escolaridad WHERE jornada_id = %s AND persona_id IN ({ph_copiar})",
+            [datos.origen_id] + a_copiar
+        )
+        escolaridades = [(r[0], datos.destino_id, r[1], r[2], r[3], r[4]) for r in cursor.fetchall()]
+        if escolaridades:
+            cursor.executemany(
+                "INSERT INTO psi_escolaridad (persona_id, jornada_id, escolaridad_grado, escolaridad_seccion, "
+                "escolaridad_turno, escolaridad_escuela) VALUES (%s, %s, %s, %s, %s, %s)",
+                escolaridades
+            )
+
+        conn.commit()
+        logger.info(
+            "Copia de beneficiarios jornada %s -> %s: %s pacientes, %s autorizaciones, %s escolaridades (usuario_id=%s)",
+            datos.origen_id, datos.destino_id, len(a_copiar), len(autorizaciones), len(escolaridades), user_id
+        )
+        return {
+            "status": "ok",
+            "mensaje": "Se copió 1 beneficiario." if len(a_copiar) == 1 else f"Se copiaron {len(a_copiar)} beneficiarios.",
+            "copiados": len(a_copiar),
+            "autorizaciones": len(autorizaciones),
+            "escolaridades": len(escolaridades),
+            "ya_en_destino": len(ya_en_destino),
+            "no_en_origen": no_en_origen,
+        }
+
+    except IntegrityError as e:
+        conn.rollback()
+        if es_error_duplicado_mysql(e):
+            return _error_json(409, "Algún beneficiario fue agregado a la jornada destino mientras copiabas. Recarga la lista e intenta de nuevo.")
+        logger.exception("Error de integridad copiando beneficiarios %s -> %s", datos.origen_id, datos.destino_id)
+        return _error_json(500, "No se pudieron copiar los beneficiarios. No se guardó ningún cambio.")
+    except Exception:
+        conn.rollback()
+        logger.exception("Error copiando beneficiarios %s -> %s", datos.origen_id, datos.destino_id)
+        return _error_json(500, "No se pudieron copiar los beneficiarios. No se guardó ningún cambio.")
+    finally:
+        conn.close()

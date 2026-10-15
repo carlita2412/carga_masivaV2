@@ -91,6 +91,10 @@
       border-radius:8px;
     }
 
+    .sidebar a.active{box-shadow:inset 3px 0 0 var(--ds-coral, #ff5c57);color:#fff}
+    .sidebar .chevron{margin-left:auto;transition:transform .2s ease;font-size:.8rem}
+    .sidebar a[aria-expanded="true"] .chevron{transform:rotate(180deg)}
+
     .main{
       margin-left:250px;
       padding:90px 34px 42px;
@@ -419,35 +423,7 @@
   </nav>
 
   <!-- Sidebar -->
-  <aside class="sidebar" id="sidebar">
-    <a href="/carga" class="active"><i class="bi bi-house-door"></i> Inicio</a>
-    <a href="/carga"><i class="bi bi-cloud-arrow-up"></i> Carga masiva</a>
-
-    <a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuJornadas" role="button">
-      <span><i class="bi bi-calendar-event"></i> Jornadas</span>
-      <i class="bi bi-chevron-down small"></i>
-    </a>
-    <div class="collapse" id="submenuJornadas">
-      <a href="/jornadas/v2" class="sub-link">Gestionar Jornadas</a>
-    </div>
-
-    <a href="/usuarios/v2"><i class="bi bi-people"></i> Gestionar usuarios</a>
-
-    <a class="d-flex justify-content-between align-items-center" data-bs-toggle="collapse" href="#submenuDescargas" role="button">
-      <span><i class="bi bi-download"></i> Descargas</span>
-      <i class="bi bi-chevron-down small"></i>
-    </a>
-    <div class="collapse" id="submenuDescargas">
-      <a href="/carga_masiva/descargas/beneficiario" download class="sub-link">Plantilla Beneficiario</a>
-      <a href="/carga_masiva/descargas/antropometria" download class="sub-link">Plantilla Antropometría</a>
-      <a href="/carga_masiva/descargas/sanguineo" download class="sub-link">Plantilla Sanguíneo</a>
-      <a href="/carga_masiva/descargas/sanguineo_avanzado" download class="sub-link">Plantilla Sanguíneo Avanzado</a>
-      <a href="/carga_masiva/descargas/vitales" download class="sub-link">Plantilla Vitales</a>
-      <a href="/carga_masiva/descargas/manual" download class="sub-link">Manual de Usuario</a>
-    </div>
-
-    <a href="/logout" class="mt-3"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a>
-  </aside>
+  {% include "partials/sidebar.html" %}
 
   <!-- Main content -->
   <main class="main">

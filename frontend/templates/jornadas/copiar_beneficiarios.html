@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .table-card{overflow:hidden}
+
+  .table-card-head{
+    padding:18px 20px;
+    border-bottom:1px solid var(--ds-border);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  .table-card-head h2{font-size:1.05rem;font-weight:800;margin:0}
+
+  .table-scroll{max-height:560px;overflow:auto}
+
+  table{margin:0 !important;min-width:850px}
+
+  thead th{
+    position:sticky;top:0;z-index:1;
+    background:#f8fafc !important;
+    color:#475467 !important;
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    border-bottom:1px solid var(--ds-border) !important;
+    padding:12px 14px !important;
+    white-space:nowrap;
+  }
+
+  tbody td{padding:10px 14px !important;vertical-align:middle;border-color:#eef0f3 !important}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:#fffaf9}
+  tbody tr.excluido td{color:#98a2b3}
+  tbody tr.excluido .nombre{text-decoration:line-through}
+  tbody tr.en-destino{cursor:not-allowed;background:#f9fafb}
+
+  .form-check-input{width:1.15rem;height:1.15rem;cursor:pointer}
+  .form-check-input:checked{background-color:var(--ds-coral);border-color:var(--ds-coral)}
+
+  .id-badge{
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+    font-size:.8rem;font-weight:700;
+    background:#f2f4f7;color:#344054;
+    padding:4px 8px;border-radius:7px;white-space:nowrap;
+  }
+
+  .tag{display:inline-block;padding:4px 9px;border-radius:999px;font-size:.75rem;font-weight:800;white-space:nowrap}
+  .tag-destino{background:#eef4ff;color:#3559c7}
+
+  .flow-arrow{
+    display:grid;place-items:center;
+    width:44px;height:44px;border-radius:50%;
+    background:#fff3f2;color:var(--ds-coral);font-size:1.2rem;
+    margin:0 auto;
+  }
+
+  .select-filter{min-height:36px !important;border-radius:8px 8px 0 0 !important;border-bottom:0 !important;font-size:.85rem}
+  .select-filter + .form-select{border-radius:0 0 10px 10px}
+
+  .counter{display:flex;gap:18px;flex-wrap:wrap;font-size:.86rem;color:var(--ds-muted)}
+  .counter b{color:var(--ds-ink);font-size:1rem}
+
+  .action-bar{
+    padding:16px 20px;
+    border-top:1px solid var(--ds-border);
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+
+  .btn-copiar{
+    min-height:44px;border-radius:10px;border:0;
+    background:var(--ds-coral);color:#fff;font-weight:700;padding:0 20px;
+  }
+  .btn-copiar:disabled{background:#f3b1ae;cursor:not-allowed}
+  .btn-copiar:not(:disabled):hover{filter:brightness(.97);color:#fff}
+
+  .input-group-text{border-color:#d0d5dd;border-radius:10px 0 0 10px;color:var(--ds-muted)}
+  .input-group .form-control{border-radius:0 10px 10px 0}
+</style>
+
+<div class="container-fluid px-0" style="max-width:1280px;">
+
+  <div>
+    <div class="eyebrow">Jornadas</div>
+    <h1 class="page-title">Copiar beneficiarios entre jornadas</h1>
+    <p class="page-subtitle">Inscribe en una jornada destino a los beneficiarios de otra jornada. Desmarca a quienes no asistirán.</p>
+  </div>
+
+  <!-- Selección de jornadas -->
+  <section class="toolbar-card">
+    <div class="row g-3 align-items-end">
+      <div class="col-lg-2">
+        <label class="form-label" for="pais">País</label>
+        <select id="pais" class="form-select">
+          <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+          <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+          <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
+        </select>
+      </div>
+
+      <div class="col-lg-4">
+        <label class="form-label" for="origen">Jornada origen</label>
+        <input type="search" class="form-control select-filter" id="filtroOrigen" placeholder="Filtrar por ID o nombre…">
+        <select id="origen" class="form-select" size="1"></select>
+      </div>
+
+      <div class="col-lg-1 d-none d-lg-block">
+        <div class="flow-arrow"><i class="bi bi-arrow-right"></i></div>
+      </div>
+
+      <div class="col-lg-5">
+        <label class="form-label" for="destino">Jornada destino</label>
+        <input type="search" class="form-control select-filter" id="filtroDestino" placeholder="Filtrar por ID o nombre…">
+        <select id="destino" class="form-select" size="1"></select>
+      </div>
+    </div>
+  </section>
+
+  <!-- Beneficiarios -->
+  <section class="table-card mt-4">
+    <div class="table-card-head">
+      <h2>Beneficiarios de la jornada origen</h2>
+      <div class="counter">
+        <span><b id="cntSeleccionados">0</b> seleccionados</span>
+        <span><b id="cntTotal">0</b> en origen</span>
+        <span><b id="cntDestino">0</b> ya en destino</span>
+      </div>
+    </div>
+
+    <div class="px-3 pt-3 d-flex gap-2 flex-wrap align-items-center" id="herramientas">
+      <div class="input-group" style="max-width:360px;">
+        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+        <input type="search" id="buscar" class="form-control" placeholder="Buscar por nombre, apellido, ID o escuela">
+      </div>
+      <button type="button" class="btn-clear" id="btnTodos"><i class="bi bi-check2-square me-1"></i>Marcar visibles</button>
+      <button type="button" class="btn-clear" id="btnNinguno"><i class="bi bi-square me-1"></i>Desmarcar visibles</button>
+    </div>
+
+    <div id="estado" class="empty-state">
+      <i class="bi bi-people"></i>
+      <div class="fw-bold mb-1">Selecciona la jornada origen y la de destino</div>
+      <div>Se mostrará la lista de beneficiarios de la jornada origen.</div>
+    </div>
+
+    <div class="table-scroll mt-3 d-none" id="tablaWrap">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th style="width:44px;"><input type="checkbox" class="form-check-input" id="chkTodos" title="Marcar / desmarcar visibles"></th>
+            <th>ID Digisalud</th>
+            <th>Nombres</th>
+            <th>Apellidos</th>
+            <th style="width:60px;">Sexo</th>
+            <th style="width:120px;">Nacimiento</th>
+            <th>Escuela / Grado</th>
+            <th style="width:130px;">Estado</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="action-bar">
+      <div class="results-text text-secondary small" id="resumenAccion">—</div>
+      <button type="button" class="btn-copiar" id="btnCopiar" disabled>
+        <i class="bi bi-files me-1"></i> <span id="btnCopiarTexto">Copiar beneficiarios</span>
+      </button>
+    </div>
+  </section>
+</div>
+
+<script>
+const JORNADAS = {{ jornadas|tojson }};
+const PAIS = {{ pais|tojson }};
+let beneficiarios = [];
+let seleccion = new Set();
+let excluidosManual = new Set();  // se conservan al cambiar de destino; se reinician al cambiar de origen
+let solicitudActual = 0;
+
+const $ = id => document.getElementById(id);
+
+function textoJornada(j) {
+  return `${j.jornada_id} · ${j.jornada_nombre} — ${j.estatus} (${j.total} benef.)`;
+}
+
+function poblarSelect(select, filtro, excluirId, placeholder) {
+  const actual = select.value;
+  const f = filtro.trim().toLowerCase();
+  select.innerHTML = "";
+  const ph = new Option(placeholder, "");
+  select.add(ph);
+  JORNADAS
+    .filter(j => String(j.jornada_id) !== String(excluirId))
+    .filter(j => !f || String(j.jornada_id).includes(f) || j.jornada_nombre.toLowerCase().includes(f))
+    .forEach(j => select.add(new Option(textoJornada(j), j.jornada_id)));
+  if ([...select.options].some(o => o.value === actual)) select.value = actual;
+}
+
+function refrescarSelects() {
+  poblarSelect($("origen"), $("filtroOrigen").value, $("destino").value, "— Elige la jornada origen —");
+  poblarSelect($("destino"), $("filtroDestino").value, $("origen").value, "— Elige la jornada destino —");
+}
+
+function mostrarEstado(icono, titulo, detalle) {
+  $("estado").innerHTML = "";
+  const i = document.createElement("i"); i.className = `bi ${icono}`;
+  const t = document.createElement("div"); t.className = "fw-bold mb-1"; t.textContent = titulo;
+  const d = document.createElement("div"); d.textContent = detalle || "";
+  $("estado").append(i, t, d);
+  $("estado").classList.remove("d-none");
+  $("tablaWrap").classList.add("d-none");
+}
+
+function coincide(b, f) {
+  if (!f) return true;
+  return [b.nombres, b.apellidos, b.id_digisalud, b.escuela].some(v => v.toLowerCase().includes(f));
+}
+
+function filasVisibles() {
+  const f = $("buscar").value.trim().toLowerCase();
+  return beneficiarios.filter(b => coincide(b, f));
+}
+
+function renderTabla() {
+  const tbody = $("tbody");
+  tbody.innerHTML = "";
+  const visibles = filasVisibles();
+  const frag = document.createDocumentFragment();
+
+  visibles.forEach(b => {
+    const tr = document.createElement("tr");
+    tr.dataset.id = b.persona_id;
+    const marcado = seleccion.has(b.persona_id);
+    if (b.ya_en_destino) tr.classList.add("en-destino");
+    else if (!marcado) tr.classList.add("excluido");
+
+    const tdChk = document.createElement("td");
+    const chk = document.createElement("input");
+    chk.type = "checkbox"; chk.className = "form-check-input";
+    chk.checked = marcado; chk.disabled = b.ya_en_destino;
+    tdChk.append(chk);
+
+    const celda = (texto, clase) => { const td = document.createElement("td"); if (clase) td.className = clase; td.textContent = texto; return td; };
+    const tdId = document.createElement("td");
+    const badge = document.createElement("span"); badge.className = "id-badge"; badge.textContent = b.id_digisalud || "—";
+    tdId.append(badge);
+
+    const tdEstado = document.createElement("td");
+    if (b.ya_en_destino) {
+      const tag = document.createElement("span"); tag.className = "tag tag-destino"; tag.textContent = "Ya en destino";
+      tdEstado.append(tag);
+    }
+
+    tr.append(
+      tdChk, tdId,
+      celda(b.nombres, "nombre fw-semibold"), celda(b.apellidos, "nombre"),
+      celda(b.sexo), celda(b.fecha_nacimiento),
+      celda([b.escuela, b.grado].filter(Boolean).join(" · ")),
+      tdEstado
+    );
+    frag.append(tr);
+  });
+  tbody.append(frag);
+
+  const habilitados = visibles.filter(b => !b.ya_en_destino);
+  const marcados = habilitados.filter(b => seleccion.has(b.persona_id)).length;
+  $("chkTodos").checked = habilitados.length > 0 && marcados === habilitados.length;
+  $("chkTodos").indeterminate = marcados > 0 && marcados < habilitados.length;
+  actualizarContadores();
+}
+
+function actualizarContadores() {
+  const enDestino = beneficiarios.filter(b => b.ya_en_destino).length;
+  const n = seleccion.size;
+  $("cntSeleccionados").textContent = n;
+  $("cntTotal").textContent = beneficiarios.length;
+  $("cntDestino").textContent = enDestino;
+  const excluidos = beneficiarios.length - enDestino - n;
+  $("btnCopiarTexto").textContent = n ? `Copiar ${n} beneficiario${n !== 1 ? "s" : ""}` : "Copiar beneficiarios";
+  $("btnCopiar").disabled = n === 0 || !$("destino").value;
+  $("resumenAccion").textContent = beneficiarios.length
+    ? `${n} se copiarán · ${excluidos} excluidos · ${enDestino} ya estaban en destino`
+    : "—";
+}
+
+function alternar(personaId, valor) {
+  const b = beneficiarios.find(x => x.persona_id === personaId);
+  if (!b || b.ya_en_destino) return;
+  const marcar = valor === undefined ? !seleccion.has(personaId) : valor;
+  if (marcar) { seleccion.add(personaId); excluidosManual.delete(personaId); }
+  else { seleccion.delete(personaId); excluidosManual.add(personaId); }
+}
+
+async function cargarBeneficiarios() {
+  const origen = $("origen").value;
+  const destino = $("destino").value;
+  beneficiarios = []; seleccion = new Set();
+  actualizarContadores();
+
+  if (!origen) return mostrarEstado("bi-people", "Selecciona la jornada origen y la de destino", "Se mostrará la lista de beneficiarios de la jornada origen.");
+
+  const id = ++solicitudActual;
+  mostrarEstado("bi-hourglass-split", "Cargando beneficiarios…");
+  try {
+    const params = new URLSearchParams({ pais: PAIS, origen_id: origen, destino_id: destino || 0 });
+    const resp = await fetch(`/api/jornadas/beneficiarios?${params}`, { credentials: "include" });
+    if (resp.status === 401) { window.location.href = "/login"; return; }
+    const data = await resp.json();
+    if (id !== solicitudActual) return;
+    if (!resp.ok || data.status !== "ok") throw new Error(data.mensaje);
+
+    beneficiarios = data.beneficiarios;
+    beneficiarios
+      .filter(b => !b.ya_en_destino && !excluidosManual.has(b.persona_id))
+      .forEach(b => seleccion.add(b.persona_id));
+
+    if (!beneficiarios.length) {
+      mostrarEstado("bi-person-x", "La jornada origen no tiene beneficiarios");
+    } else {
+      $("estado").classList.add("d-none");
+      $("tablaWrap").classList.remove("d-none");
+      renderTabla();
+    }
+    if (!destino && beneficiarios.length) mostrarToast("Elige ahora la jornada destino.", "info");
+  } catch (e) {
+    if (id === solicitudActual) mostrarEstado("bi-exclamation-triangle", "No se pudo cargar la lista", e.message || "");
+  }
+}
+
+async function copiar() {
+  const origen = $("origen"), destino = $("destino");
+  const ids = [...seleccion];
+  const btn = $("btnCopiar");
+  btn.disabled = true;
+  $("btnCopiarTexto").textContent = "Copiando…";
+  try {
+    const resp = await fetch("/api/jornadas/copiar_beneficiarios", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pais: PAIS, origen_id: Number(origen.value), destino_id: Number(destino.value), persona_ids: ids }),
+    });
+    if (resp.status === 401) { window.location.href = "/login"; return; }
+    const data = await resp.json();
+    if (!resp.ok || data.status !== "ok") throw new Error(data.mensaje || "No se pudieron copiar los beneficiarios.");
+
+    $("modalMessage").innerHTML = "";
+    const lista = document.createElement("ul");
+    lista.className = "mb-0";
+    [
+      `${data.copiados} beneficiarios inscritos en la jornada destino`,
+      `${data.autorizaciones} autorizaciones copiadas`,
+      `${data.escolaridades} registros de escolaridad copiados`,
+    ].forEach(t => { const li = document.createElement("li"); li.textContent = t; lista.append(li); });
+    const p = document.createElement("p");
+    p.className = "mb-2";
+    p.textContent = data.mensaje;
+    $("modalMessage").append(p, lista);
+    const okBtn = document.querySelector("#successModal .btn-save");
+    okBtn.removeAttribute("onclick");
+    new bootstrap.Modal($("successModal")).show();
+
+    const destinoJ = JORNADAS.find(j => String(j.jornada_id) === destino.value);
+    if (destinoJ) destinoJ.total += data.copiados;
+    refrescarSelects();
+    await cargarBeneficiarios();
+  } catch (e) {
+    mostrarToast(e.message, "error");
+    actualizarContadores();
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  refrescarSelects();
+
+  $("pais").addEventListener("change", function () {
+    window.location.search = new URLSearchParams({ pais: this.value }).toString();
+  });
+
+  ["Origen", "Destino"].forEach(nombre => {
+    $(`filtro${nombre}`).addEventListener("input", refrescarSelects);
+  });
+
+  $("origen").addEventListener("change", () => { excluidosManual = new Set(); refrescarSelects(); cargarBeneficiarios(); });
+  $("destino").addEventListener("change", () => { refrescarSelects(); cargarBeneficiarios(); });
+
+  $("buscar").addEventListener("input", renderTabla);
+
+  $("tbody").addEventListener("click", ev => {
+    const tr = ev.target.closest("tr");
+    if (!tr) return;
+    const chk = tr.querySelector("input[type=checkbox]");
+    alternar(tr.dataset.id, ev.target === chk ? chk.checked : undefined);
+    renderTabla();
+  });
+
+  const marcarVisibles = valor => { filasVisibles().forEach(b => alternar(b.persona_id, valor)); renderTabla(); };
+  $("chkTodos").addEventListener("change", function () { marcarVisibles(this.checked); });
+  $("btnTodos").addEventListener("click", () => marcarVisibles(true));
+  $("btnNinguno").addEventListener("click", () => marcarVisibles(false));
+
+  $("btnCopiar").addEventListener("click", () => {
+    const o = JORNADAS.find(j => String(j.jornada_id) === $("origen").value);
+    const d = JORNADAS.find(j => String(j.jornada_id) === $("destino").value);
+    const n = seleccion.size;
+    confirmarAccion(
+      `Se inscribirán ${n} beneficiario${n !== 1 ? "s" : ""} de "${o.jornada_nombre}" en la jornada "${d.jornada_nombre}" (con sus autorizaciones y escolaridad). ¿Continuar?`,
+      copiar
+    );
+  });
+});
+</script>
+{% endblock %}

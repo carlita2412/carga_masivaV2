@@ -223,6 +223,21 @@
     font-size:.86rem;
   }
 
+  .table-footer{
+    padding:14px 20px;
+    border-top:1px solid var(--ds-border);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  .per-page-select{min-height:34px;width:auto;border-radius:8px}
+
+  .pagination .page-link{color:#475467;border-color:var(--ds-border)}
+  .pagination .active .page-link{background:var(--ds-coral);border-color:var(--ds-coral);color:#fff}
+
   .modal-content{
     border:0;
     border-radius:16px;
@@ -295,7 +310,8 @@
 
   <!-- Filtros -->
   <section class="toolbar-card">
-    <form method="get" class="row g-3 align-items-end">
+    <form method="get" class="row g-3 align-items-end" id="filtrosForm">
+      <input type="hidden" name="por_pagina" value="{{ por_pagina }}">
       <div class="col-md-3">
         <label class="form-label" for="pais">País</label>
         <select id="pais" name="pais" class="form-select">
@@ -340,19 +356,19 @@
   <div class="summary-row">
     <div class="summary-pill">
       <div class="summary-icon"><i class="bi bi-calendar3"></i></div>
-      <div><div class="summary-value">{{ jornadas|length }}</div><div class="summary-label">Jornadas visibles</div></div>
+      <div><div class="summary-value">{{ total }}</div><div class="summary-label">Jornadas encontradas</div></div>
     </div>
     <div class="summary-pill">
       <div class="summary-icon" style="color:#18864b"><i class="bi bi-play-circle"></i></div>
-      <div><div class="summary-value">{{ jornadas|selectattr('jornada_status','equalto',2)|list|length }}</div><div class="summary-label">En marcha</div></div>
+      <div><div class="summary-value">{{ conteo_estatus.get(2, 0) }}</div><div class="summary-label">En marcha</div></div>
     </div>
     <div class="summary-pill">
       <div class="summary-icon" style="color:#596579"><i class="bi bi-check-circle"></i></div>
-      <div><div class="summary-value">{{ jornadas|selectattr('jornada_status','equalto',3)|list|length }}</div><div class="summary-label">Finalizadas</div></div>
+      <div><div class="summary-value">{{ conteo_estatus.get(3, 0) }}</div><div class="summary-label">Finalizadas</div></div>
     </div>
     <div class="summary-pill">
       <div class="summary-icon" style="color:#a56400"><i class="bi bi-hourglass-split"></i></div>
-      <div><div class="summary-value">{{ jornadas|selectattr('jornada_status','equalto',0)|list|length }}</div><div class="summary-label">Pendientes</div></div>
+      <div><div class="summary-value">{{ conteo_estatus.get(0, 0) }}</div><div class="summary-label">Pendientes</div></div>
     </div>
   </div>
 
@@ -360,7 +376,14 @@
   <section class="table-card">
     <div class="table-card-head">
       <h2>Listado de jornadas</h2>
-      <div class="results-text">Ordenadas por ID reciente</div>
+      <div class="d-flex align-items-center gap-2">
+        <label class="results-text mb-0" for="porPagina">Mostrar las últimas</label>
+        <select id="porPagina" class="form-select form-select-sm per-page-select">
+          {% for n in opciones_por_pagina %}
+          <option value="{{ n }}" {% if n == por_pagina %}selected{% endif %}>{{ n if n else 'Todas' }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
 
 
@@ -404,8 +427,36 @@
       </table>
     </div>
 
+    {% set desde = (pagina - 1) * por_pagina + 1 if por_pagina else 1 %}
     <div class="table-footer">
-      <div class="results-text">Mostrando {{ jornadas|length }} jornada{{ 's' if jornadas|length != 1 }}</div>
+      <div class="results-text">
+        Mostrando {{ desde }}–{{ desde + jornadas|length - 1 }} de {{ total }} jornada{{ 's' if total != 1 }}
+      </div>
+      {% if total_paginas > 1 %}
+      <nav aria-label="Paginación de jornadas">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if pagina <= 1 %}disabled{% endif %}">
+            <a class="page-link" href="#" data-pagina="{{ pagina - 1 }}" aria-label="Anterior">&laquo;</a>
+          </li>
+          {% if pagina > 3 %}
+          <li class="page-item"><a class="page-link" href="#" data-pagina="1">1</a></li>
+          {% if pagina > 4 %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}
+          {% endif %}
+          {% for p in range([1, pagina - 2]|max, [total_paginas, pagina + 2]|min + 1) %}
+          <li class="page-item {% if p == pagina %}active{% endif %}">
+            <a class="page-link" href="#" data-pagina="{{ p }}">{{ p }}</a>
+          </li>
+          {% endfor %}
+          {% if pagina < total_paginas - 2 %}
+          {% if pagina < total_paginas - 3 %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}
+          <li class="page-item"><a class="page-link" href="#" data-pagina="{{ total_paginas }}">{{ total_paginas }}</a></li>
+          {% endif %}
+          <li class="page-item {% if pagina >= total_paginas %}disabled{% endif %}">
+            <a class="page-link" href="#" data-pagina="{{ pagina + 1 }}" aria-label="Siguiente">&raquo;</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
     </div>
 
  
@@ -520,7 +571,7 @@ document.addEventListener("DOMContentLoaded", () => {
       body: formData,
       credentials: "include"
     }).then(resp => {
-      if (resp.redirected) {
+      if (resp.redirected && new URL(resp.url).pathname.endsWith("/login")) {
         window.location.href = resp.url;
       } else {
         location.reload();
@@ -537,6 +588,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
  
 
+
+  function irA(cambios) {
+    const params = new URLSearchParams(window.location.search);
+    Object.entries(cambios).forEach(([k, v]) => params.set(k, v));
+    window.location.search = params.toString();
+  }
+
+  document.getElementById("porPagina").addEventListener("change", function() {
+    irA({ por_pagina: this.value, pagina: 1 });
+  });
+
+  document.querySelectorAll(".pagination a[data-pagina]").forEach(a => {
+    a.addEventListener("click", ev => {
+      ev.preventDefault();
+      if (!a.closest(".page-item").classList.contains("disabled")) irA({ pagina: a.dataset.pagina });
+    });
+  });
 
   document.getElementById("modalInputField").addEventListener("input", function() {
     this.classList.remove("is-invalid");

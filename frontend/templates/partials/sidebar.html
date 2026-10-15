@@ -1,0 +1,36 @@
+{# Sidebar único: lo incluyen base.html e index.html. #}
+{% set ruta = request.url.path | replace('/carga_masiva/', '/', 1) %}
+{% set en_jornadas = ruta.startswith('/jornadas') %}
+<aside class="sidebar" id="sidebar">
+  <a href="/carga" class="{{ 'active' if ruta == '/carga' }}"><i class="bi bi-house-door"></i> Inicio</a>
+  <a href="/carga"><i class="bi bi-cloud-arrow-up"></i> Carga masiva</a>
+
+  <a class="d-flex align-items-center {{ 'collapsed' if not en_jornadas }}" data-bs-toggle="collapse" href="#submenuJornadas"
+     role="button" aria-expanded="{{ 'true' if en_jornadas else 'false' }}">
+    <i class="bi bi-calendar-event"></i>&nbsp; Jornadas
+    <i class="bi bi-chevron-down chevron"></i>
+  </a>
+  <div class="collapse {{ 'show' if en_jornadas }}" id="submenuJornadas">
+    <a href="/jornadas/v2" class="sub-link {{ 'active' if ruta == '/jornadas/v2' }}">Gestionar Jornadas</a>
+    <a href="/jornadas/v2/copiar" class="sub-link {{ 'active' if ruta == '/jornadas/v2/copiar' }}">Copiar Beneficiarios J-J</a>
+  </div>
+
+  <a href="/beneficiarios/v2" class="{{ 'active' if ruta.startswith('/beneficiarios') }}"><i class="bi bi-person-vcard"></i> Beneficiarios</a>
+
+  <a href="/usuarios/v2" class="{{ 'active' if ruta.startswith('/usuarios') }}"><i class="bi bi-people"></i> Gestionar usuarios</a>
+
+  <a class="d-flex align-items-center collapsed" data-bs-toggle="collapse" href="#submenuDescargas" role="button" aria-expanded="false">
+    <i class="bi bi-download"></i>&nbsp; Descargas
+    <i class="bi bi-chevron-down chevron"></i>
+  </a>
+  <div class="collapse" id="submenuDescargas">
+    <a href="/carga_masiva/descargas/beneficiario" download class="sub-link">Plantilla Beneficiario</a>
+    <a href="/carga_masiva/descargas/antropometria" download class="sub-link">Plantilla Antropometría</a>
+    <a href="/carga_masiva/descargas/sanguineo" download class="sub-link">Plantilla Sanguíneo</a>
+    <a href="/carga_masiva/descargas/sanguineo_avanzado" download class="sub-link">Plantilla Sanguíneo Avanzado</a>
+    <a href="/carga_masiva/descargas/vitales" download class="sub-link">Plantilla Vitales</a>
+    <a href="/carga_masiva/descargas/manual" download class="sub-link">Manual de Usuario</a>
+  </div>
+
+  <a href="/logout" class="mt-3"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a>
+</aside>

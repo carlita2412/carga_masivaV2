@@ -277,34 +277,7 @@
 </nav>
 
 <!-- Sidebar -->
-<aside class="sidebar" id="sidebar">
-  <a href="/carga"><i class="bi bi-house-door"></i> Inicio</a>
-  <a href="/carga"><i class="bi bi-cloud-arrow-up"></i> Carga masiva</a>
-
-  <a class="d-flex align-items-center" data-bs-toggle="collapse" href="#submenuJornadas" role="button" aria-expanded="false">
-    <i class="bi bi-calendar-event"></i>&nbsp; Jornadas
-    <i class="bi bi-chevron-down chevron"></i>
-  </a>
-  <div class="collapse" id="submenuJornadas">
-    <a href="/jornadas/v2" class="sub-link">Gestionar Jornadas</a>
-  </div>
-
-  <a href="/usuarios/v2"><i class="bi bi-people"></i> Gestionar usuarios</a>
-
-  <a class="d-flex align-items-center" data-bs-toggle="collapse" href="#submenuDescargas" role="button" aria-expanded="false">
-    <i class="bi bi-download"></i>&nbsp; Descargas
-    <i class="bi bi-chevron-down chevron"></i>
-  </a>
-  <div class="collapse" id="submenuDescargas">
-    <a href="/carga_masiva/descargas/beneficiario" download class="sub-link">Plantilla Beneficiario</a>
-    <a href="/carga_masiva/descargas/antropometria" download class="sub-link">Plantilla Antropometría</a>
-    <a href="/carga_masiva/descargas/sanguineo" download class="sub-link">Plantilla Sanguíneo</a>
-    <a href="/carga_masiva/descargas/vitales" download class="sub-link">Plantilla Vitales</a>
-    <a href="/carga_masiva/descargas/manual" download class="sub-link">Manual de Usuario</a>
-  </div>
-
-  <a href="/logout" class="mt-3"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a>
-</aside>
+{% include "partials/sidebar.html" %}
 
 <div class="main-content" id="mainContent">
   {% block content %}{% endblock %}
@@ -322,17 +295,6 @@
     sidebar.classList.toggle("hidden");
     sidebar.classList.toggle("show");
   }
-
-  // Marca como activo el enlace de la sección actual
-  document.addEventListener("DOMContentLoaded", () => {
-    const path = window.location.pathname;
-    document.querySelectorAll(".sidebar > a[href]").forEach(a => {
-      const href = a.getAttribute("href");
-      if (href && href !== "/logout" && path.startsWith(href)) {
-        a.classList.add("active");
-      }
-    });
-  });
 </script>
 
 <!-- Toasts (reemplaza a window.alert para feedback no bloqueante) -->

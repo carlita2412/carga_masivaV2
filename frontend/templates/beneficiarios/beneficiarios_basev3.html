@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .table-card{overflow:hidden}
+
+  .table-card-head{
+    padding:18px 20px;
+    border-bottom:1px solid var(--ds-border);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+
+  .table-card-head h2{font-size:1.05rem;font-weight:800;margin:0}
+
+  table{margin:0 !important;min-width:750px}
+
+  thead th{
+    background:#f8fafc !important;
+    color:#475467 !important;
+    font-size:.78rem;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    border-bottom:1px solid var(--ds-border) !important;
+    padding:13px 15px !important;
+    white-space:nowrap;
+  }
+
+  tbody td{padding:14px 15px !important;vertical-align:middle;border-color:#eef0f3 !important}
+  tbody tr:hover{background:#fffaf9}
+
+  .id-badge{
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+    font-size:.82rem;
+    font-weight:700;
+    background:#f2f4f7;
+    color:#344054;
+    padding:5px 9px;
+    border-radius:8px;
+    white-space:nowrap;
+  }
+
+  .sexo-badge{
+    display:inline-grid;place-items:center;
+    width:30px;height:30px;border-radius:8px;
+    font-weight:800;font-size:.82rem;
+  }
+  .sexo-M{background:#eef4ff;color:#3559c7}
+  .sexo-F{background:#fdf0f6;color:#b43c7a}
+
+  .icon-btn{
+    width:36px;height:36px;
+    border:1px solid var(--ds-border);
+    border-radius:9px;
+    display:grid;place-items:center;
+    background:#fff;
+    color:#475467;
+    cursor:pointer;
+    transition:.2s;
+  }
+  .icon-btn:hover{transform:translateY(-1px);box-shadow:0 3px 8px rgba(16,24,40,.08);color:#0d6efd;border-color:#8cb8ff;background:#f5f9ff}
+
+  .results-text{color:var(--ds-muted);font-size:.86rem}
+
+  .input-group-text{border-color:#d0d5dd;border-radius:10px 0 0 10px;color:var(--ds-muted)}
+  .input-group .form-control{border-radius:0 10px 10px 0}
+
+  .id-preview{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700;background:#f8fafc !important}
+  .id-changed{color:#b7791f;font-size:.8rem;font-weight:700}
+
+  .pagination .page-link{color:#475467;border-color:var(--ds-border)}
+  .pagination .active .page-link{background:var(--ds-coral);border-color:var(--ds-coral);color:#fff}
+</style>
+
+<div class="container-fluid px-0" style="max-width:1280px;">
+
+  <div>
+    <div class="eyebrow">Administración</div>
+    <h1 class="page-title">Beneficiarios</h1>
+    <p class="page-subtitle">Consulta y corrige los datos de identidad de los beneficiarios.</p>
+  </div>
+
+  <!-- Filtros -->
+  <section class="toolbar-card">
+    <form method="get" class="row g-3 align-items-end" id="filtrosForm">
+      <div class="col-md-3">
+        <label class="form-label" for="pais">País</label>
+        <select id="pais" name="pais" class="form-select" onchange="this.form.submit()">
+          <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+          <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+          <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label" for="organizacion">Organización</label>
+        <select id="organizacion" name="organizacion_id" class="form-select" onchange="this.form.submit()">
+          {% for org in organizaciones %}
+            <option value="{{ org.organizacion_id }}" {% if org.organizacion_id == organizacion_id %}selected{% endif %}>{{ org.organizacion_nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label" for="buscar">Buscar beneficiario</label>
+        <div class="input-group">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input id="buscar" name="buscar" value="{{ buscar }}" class="form-control" placeholder="ID Digisalud, nombre o apellido">
+        </div>
+      </div>
+
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn-filter flex-grow-1">
+          <i class="bi bi-funnel me-1"></i> Filtrar
+        </button>
+        <a href="/beneficiarios/v2" class="btn-clear d-grid align-items-center" title="Restablecer filtros">
+          <i class="bi bi-arrow-counterclockwise"></i>
+        </a>
+      </div>
+    </form>
+  </section>
+
+  <!-- Tabla -->
+  <section class="table-card mt-4">
+    <div class="table-card-head">
+      <h2>Listado de beneficiarios</h2>
+      <div class="results-text">{{ total }} beneficiario{{ 's' if total != 1 }} &middot; página {{ pagina }} de {{ total_paginas }}</div>
+    </div>
+
+    {% if beneficiarios %}
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>ID Digisalud</th>
+            <th>Nombres</th>
+            <th>Apellidos</th>
+            <th style="width:80px;">Sexo</th>
+            <th style="width:150px;">Fecha de nacimiento</th>
+            <th style="width:80px;">Editar</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in beneficiarios %}
+          <tr id="fila-{{ b.persona_id }}"
+              data-persona-id="{{ b.persona_id }}"
+              data-id-digisalud="{{ b.id_digisalud }}"
+              data-nombres="{{ b.nombres }}"
+              data-apellidos="{{ b.apellidos }}"
+              data-sexo="{{ b.sexo }}"
+              data-fecha="{{ b.fecha_nacimiento }}">
+            <td><span class="id-badge col-id">{{ b.id_digisalud or '—' }}</span></td>
+            <td class="col-nombres fw-semibold">{{ b.nombres }}</td>
+            <td class="col-apellidos">{{ b.apellidos }}</td>
+            <td><span class="sexo-badge sexo-{{ b.sexo }} col-sexo">{{ b.sexo or '—' }}</span></td>
+            <td class="col-fecha">{{ b.fecha_nacimiento_str or '—' }}</td>
+            <td>
+              <button type="button" class="icon-btn" title="Editar beneficiario" onclick="abrirEdicion(this.closest('tr'))">
+                <i class="bi bi-pencil-square"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if total_paginas > 1 %}
+    {% set qs = 'pais=' ~ pais ~ '&organizacion_id=' ~ organizacion_id ~ '&buscar=' ~ (buscar|urlencode) %}
+    <nav class="p-3 d-flex justify-content-end">
+      <ul class="pagination mb-0">
+        <li class="page-item {% if pagina <= 1 %}disabled{% endif %}">
+          <a class="page-link" href="?{{ qs }}&pagina={{ pagina - 1 }}">&laquo;</a>
+        </li>
+        {% for p in range([1, pagina - 2]|max, [total_paginas, pagina + 2]|min + 1) %}
+        <li class="page-item {% if p == pagina %}active{% endif %}">
+          <a class="page-link" href="?{{ qs }}&pagina={{ p }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        <li class="page-item {% if pagina >= total_paginas %}disabled{% endif %}">
+          <a class="page-link" href="?{{ qs }}&pagina={{ pagina + 1 }}">&raquo;</a>
+        </li>
+      </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-person-vcard"></i>
+      <div class="fw-bold mb-1">No se encontraron beneficiarios</div>
+      <div>Ajusta los filtros de país, organización o búsqueda.</div>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+<!-- Modal de edición -->
+<div class="modal fade" id="editarModal" tabindex="-1" aria-labelledby="editarModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="editarForm" novalidate>
+        <div class="modal-header">
+          <h5 class="modal-title" id="editarModalLabel"><i class="bi bi-pencil-square me-2"></i>Editar beneficiario</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label" for="edIdDigisalud">ID Digisalud</label>
+            <input id="edIdDigisalud" class="form-control id-preview" readonly tabindex="-1">
+            <div class="id-changed d-none mt-1" id="edIdAviso">
+              <i class="bi bi-arrow-repeat"></i> Se actualizará al guardar (antes: <span id="edIdAnterior"></span>)
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="edNombres">Nombres</label>
+            <input id="edNombres" class="form-control text-uppercase" required maxlength="100">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="edApellidos">Apellidos</label>
+            <input id="edApellidos" class="form-control text-uppercase" maxlength="100">
+          </div>
+          <div class="row g-3">
+            <div class="col-5">
+              <label class="form-label" for="edSexo">Sexo</label>
+              <select id="edSexo" class="form-select" required>
+                <option value="M">M</option>
+                <option value="F">F</option>
+              </select>
+            </div>
+            <div class="col-7">
+              <label class="form-label" for="edFecha">Fecha de nacimiento</label>
+              <input id="edFecha" type="date" class="form-control" required>
+            </div>
+          </div>
+          <div class="alert alert-danger d-none mt-3 mb-0" id="edError" role="alert"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-save" id="edGuardar">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+const PAIS = "{{ pais }}";
+const CABECERA = "{{ cabecera }}";
+let filaActual = null;
+
+// Debe replicar generar_id_digisalud() de backend/services/carga_beneficiario.py.
+// Es solo una vista previa: el servidor recalcula el ID al guardar.
+function normalizarTexto(t) {
+  return (t || "").normalize("NFKD").replace(/\p{M}/gu, "").replace(/´/g, "").trim();
+}
+
+function generarIdDigisalud(nombre, apellido, genero, fecha) {
+  const pn = normalizarTexto(nombre).toUpperCase().split(/\s+/).filter(Boolean);
+  const pa = normalizarTexto(apellido).toUpperCase().split(/\s+/).filter(Boolean);
+  const n1 = pn[0] ? pn[0].slice(0, 3) : "";
+  const n2 = pn[1] ? pn[1].slice(0, 1) : "";
+  const a1 = pa[0] ? pa[0].slice(0, 3) : "";
+  const a2 = pa[1] ? pa[1].slice(0, 1) : "";
+  return `${CABECERA}${(genero || "").toUpperCase()}${n1}${n2}${a1}${a2}${(fecha || "").replace(/-/g, "")}`;
+}
+
+function datosFormulario() {
+  return {
+    nombres: document.getElementById("edNombres").value,
+    apellidos: document.getElementById("edApellidos").value,
+    sexo: document.getElementById("edSexo").value,
+    fecha: document.getElementById("edFecha").value,
+  };
+}
+
+function huboCambios() {
+  const d = datosFormulario();
+  const f = filaActual.dataset;
+  const limpio = s => (s || "").trim().replace(/\s+/g, " ").toUpperCase();
+  return limpio(d.nombres) !== limpio(f.nombres)
+      || limpio(d.apellidos) !== limpio(f.apellidos)
+      || d.sexo !== f.sexo
+      || d.fecha !== f.fecha;
+}
+
+function actualizarVistaPreviaId() {
+  const d = datosFormulario();
+  const anterior = filaActual.dataset.idDigisalud;
+  const nuevo = huboCambios() ? generarIdDigisalud(d.nombres, d.apellidos, d.sexo, d.fecha) : anterior;
+  document.getElementById("edIdDigisalud").value = nuevo;
+  const aviso = document.getElementById("edIdAviso");
+  document.getElementById("edIdAnterior").textContent = anterior || "—";
+  aviso.classList.toggle("d-none", nuevo === anterior);
+  document.getElementById("edError").classList.add("d-none");
+}
+
+function abrirEdicion(fila) {
+  filaActual = fila;
+  const f = fila.dataset;
+  document.getElementById("edNombres").value = f.nombres;
+  document.getElementById("edApellidos").value = f.apellidos;
+  const sexo = document.getElementById("edSexo");
+  sexo.value = ["M", "F"].includes(f.sexo) ? f.sexo : "";
+  document.getElementById("edFecha").value = f.fecha;
+  document.getElementById("edFecha").max = new Date().toISOString().slice(0, 10);
+  document.getElementById("edGuardar").disabled = false;
+  actualizarVistaPreviaId();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById("editarModal")).show();
+}
+
+function mostrarErrorModal(mensaje) {
+  const el = document.getElementById("edError");
+  el.textContent = mensaje;
+  el.classList.remove("d-none");
+}
+
+function aplicarCambiosEnFila(d, idNuevo) {
+  const f = filaActual.dataset;
+  f.nombres = d.nombres.trim().replace(/\s+/g, " ").toUpperCase();
+  f.apellidos = d.apellidos.trim().replace(/\s+/g, " ").toUpperCase();
+  f.sexo = d.sexo;
+  f.fecha = d.fecha;
+  f.idDigisalud = idNuevo;
+  filaActual.querySelector(".col-id").textContent = idNuevo;
+  filaActual.querySelector(".col-nombres").textContent = f.nombres;
+  filaActual.querySelector(".col-apellidos").textContent = f.apellidos;
+  const s = filaActual.querySelector(".col-sexo");
+  s.textContent = d.sexo;
+  s.className = `sexo-badge sexo-${d.sexo} col-sexo`;
+  const [y, m, dd] = d.fecha.split("-");
+  filaActual.querySelector(".col-fecha").textContent = `${dd}/${m}/${y}`;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  ["edNombres", "edApellidos", "edSexo", "edFecha"].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener("input", actualizarVistaPreviaId);
+    el.addEventListener("change", actualizarVistaPreviaId);
+  });
+
+  document.getElementById("editarForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const d = datosFormulario();
+
+    if (!d.nombres.trim()) return mostrarErrorModal("Los nombres son obligatorios.");
+    if (!["M", "F"].includes(d.sexo)) return mostrarErrorModal("Selecciona el sexo.");
+    if (!d.fecha) return mostrarErrorModal("La fecha de nacimiento es obligatoria.");
+
+    const modal = bootstrap.Modal.getInstance(document.getElementById("editarModal"));
+    if (!huboCambios()) {
+      modal.hide();
+      return mostrarToast("No hubo cambios.", "info");
+    }
+
+    const fd = new FormData();
+    fd.append("pais", PAIS);
+    fd.append("persona_id", filaActual.dataset.personaId);
+    fd.append("nombres", d.nombres);
+    fd.append("apellidos", d.apellidos);
+    fd.append("sexo", d.sexo);
+    fd.append("fecha_nacimiento", d.fecha);
+
+    const btn = document.getElementById("edGuardar");
+    btn.disabled = true;
+    try {
+      const resp = await fetch("/beneficiarios/v2/editar", { method: "POST", body: fd, credentials: "include" });
+      if (resp.status === 401) { window.location.href = "/login"; return; }
+      const data = await resp.json();
+      if (!resp.ok || data.status !== "ok") {
+        mostrarErrorModal(data.mensaje || "No se pudo actualizar el beneficiario.");
+        return;
+      }
+      aplicarCambiosEnFila(d, data.id_digisalud);
+      modal.hide();
+      mostrarToast(`Beneficiario actualizado. ID Digisalud: ${data.id_digisalud}`);
+    } catch (e) {
+      mostrarErrorModal("Error de conexión con el servidor.");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  const buscarInput = document.getElementById("buscar");
+  let debounceTimer;
+  buscarInput.addEventListener("input", function () {
+    clearTimeout(debounceTimer);
+    const valor = this.value.trim();
+    if (valor.length >= 3 || valor.length === 0) {
+      debounceTimer = setTimeout(() => buscarInput.form.submit(), 500);
+    }
+  });
+});
+</script>
+{% endblock %}
