@@ -12,5 +12,9 @@ Thumbs.db
 
 # Ignorar carpetas de compilación o build
 dist/
-build/sql/VE20260827.sql
+build/
+sql/VE20260827.sql
  sql/*.sql
+
+# Instrucciones locales de Claude Code
+CLAUDE.md
