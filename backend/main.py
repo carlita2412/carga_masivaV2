@@ -1105,7 +1105,7 @@ def descargar_sanguineo_avanzado():
 
 @app.get("/descargas/manual", response_class=FileResponse)
 def descargar_manual():
-    ruta = BASE_DIR  / "plantillas" / "manual_usuario.docs"
+    ruta = BASE_DIR  / "plantillas" / "Manual_de_Usuario.docx"
     return FileResponse(path=ruta, filename="Manual_de_Usuario.docx", media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
  
@@ -1789,6 +1789,377 @@ def api_copiar_beneficiarios(request: Request, datos: CopiaBeneficiariosIn):
     except Exception:
         conn.rollback()
         logger.exception("Error copiando beneficiarios %s -> %s", datos.origen_id, datos.destino_id)
+        return _error_json(500, "No se pudieron copiar los beneficiarios. No se guardó ningún cambio.")
+    finally:
+        conn.close()
+
+
+
+# ---------------------------------------------------
+# GESTIÓN DE CENTROS
+# Por ahora solo permite consultar centros y editar su nombre.
+# ---------------------------------------------------
+OPCIONES_POR_PAGINA_CENTROS = (10, 20, 50, 0)  # 0 = todos
+NOMBRE_CENTRO_MAX = 255
+
+
+@app.get("/centros/v2", response_class=HTMLResponse)
+def gestion_centros_v2(
+    request: Request,
+    pais: str = "vzla",
+    buscar: str = "",
+    por_pagina: int = 10,
+    pagina: int = 1
+):
+    usuario = _usuario_autenticado(request)
+    if not usuario:
+        return RedirectResponse(url="/login", status_code=302)
+
+    if pais not in PAISES_VALIDOS:
+        pais = "vzla"
+    buscar = buscar.strip()
+    if por_pagina not in OPCIONES_POR_PAGINA_CENTROS:
+        por_pagina = 10
+    pagina = max(pagina, 1)
+
+    filtros = " FROM psi_centros c WHERE 1 = 1"
+    params = []
+    if buscar:
+        filtros += " AND (c.centro_nombre LIKE %s OR c.centro_id LIKE %s)"
+        params.extend([f"%{buscar}%", f"%{buscar}%"])
+
+    conn = get_connection(pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*)" + filtros, params)
+        total = cursor.fetchone()[0]
+
+        query = (
+            "SELECT c.centro_id, c.centro_nombre, "
+            "(SELECT COUNT(*) FROM psi_pacientes_x_centros pc WHERE pc.centro_id = c.centro_id)"
+            + filtros + " ORDER BY c.centro_id DESC"
+        )
+        if por_pagina:
+            total_paginas = max((total + por_pagina - 1) // por_pagina, 1)
+            pagina = min(pagina, total_paginas)
+            query += " LIMIT %s OFFSET %s"
+            params.extend([por_pagina, (pagina - 1) * por_pagina])
+        else:
+            total_paginas = 1
+            pagina = 1
+        cursor.execute(query, params)
+        centros = [{
+            "centro_id": r[0],
+            "centro_nombre": r[1] or "",
+            "total_beneficiarios": r[2],
+        } for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    return templates.TemplateResponse(request, "centros/centros_basev3.html", {
+        "request": request,
+        "usuario": usuario,
+        "pais": pais,
+        "buscar": buscar,
+        "centros": centros,
+        "total": total,
+        "por_pagina": por_pagina,
+        "opciones_por_pagina": OPCIONES_POR_PAGINA_CENTROS,
+        "pagina": pagina,
+        "total_paginas": total_paginas,
+    })
+
+
+@app.post("/centros/v2/accion")
+def accion_centro_v2(
+    request: Request,
+    accion: str = Form(...),
+    pais: str = Form(...),
+    centro_id: int = Form(...),
+    nuevo_nombre: str = Form(""),
+):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+    if accion != "editar-nombre":
+        return _error_json(400, "Acción no válida.")
+
+    nuevo_nombre = " ".join(nuevo_nombre.split())
+    if not nuevo_nombre:
+        return _error_json(400, "El nombre del centro es obligatorio.")
+    if len(nuevo_nombre) > NOMBRE_CENTRO_MAX:
+        return _error_json(400, f"El nombre no puede superar {NOMBRE_CENTRO_MAX} caracteres.")
+
+    conn = get_connection(pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT centro_nombre FROM psi_centros WHERE centro_id = %s", (centro_id,))
+        actual = cursor.fetchone()
+        if not actual:
+            return _error_json(404, "El centro no existe.")
+        if (actual[0] or "") == nuevo_nombre:
+            return {"status": "ok", "mensaje": "No hubo cambios.", "centro_nombre": nuevo_nombre}
+
+        cursor.execute(
+            "UPDATE psi_centros SET centro_nombre = %s WHERE centro_id = %s",
+            (nuevo_nombre, centro_id)
+        )
+        conn.commit()
+        logger.info("Centro %s renombrado (usuario_id=%s)", centro_id, _user_id_sesion(request))
+        return {"status": "ok", "mensaje": "Nombre del centro actualizado.", "centro_nombre": nuevo_nombre}
+    except Exception:
+        conn.rollback()
+        logger.exception("Error al renombrar centro_id=%s", centro_id)
+        return _error_json(500, "No se pudo actualizar el centro.")
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------
+# COPIAR BENEFICIARIOS DE UNA JORNADA A UN CENTRO (J-C)
+# Mismas reglas que J-J: se copia la inscripción, las autorizaciones y la
+# escolaridad de los beneficiarios elegidos; quienes ya están en el centro
+# destino se omiten; todo en una sola transacción.
+# ---------------------------------------------------
+def _institucion_de_centro(cursor, centro_id: int):
+    cursor.execute("SELECT institucion_id FROM psi_instituciones_x_centro WHERE centro_id = %s", (centro_id,))
+    filas = cursor.fetchall()
+    return filas[0][0] if len(filas) == 1 else None
+
+
+def _tabla_tiene_columna(cursor, tabla: str, columna: str) -> bool:
+    cursor.execute(
+        "SELECT 1 FROM information_schema.columns "
+        "WHERE table_schema = DATABASE() AND table_name = %s AND column_name = %s LIMIT 1",
+        (tabla, columna)
+    )
+    return cursor.fetchone() is not None
+
+
+@app.get("/centros/v2/copiar", response_class=HTMLResponse)
+def copiar_beneficiarios_jornada_centro(request: Request, pais: str = "vzla"):
+    usuario = _usuario_autenticado(request)
+    if not usuario:
+        return RedirectResponse(url="/login", status_code=302)
+    if pais not in PAISES_VALIDOS:
+        pais = "vzla"
+
+    estatus_dict = {0: "Pendiente", 1: "Suspendida", 2: "En marcha", 3: "Finalizada", 4: "Cancelada"}
+    conn = get_connection(pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT j.jornada_id, j.jornada_nombre, j.jornada_status, COALESCE(pj.total, 0)
+            FROM psi_jornadas j
+            LEFT JOIN (
+                SELECT jornada_id, COUNT(*) AS total FROM psi_pacientes_x_jornada GROUP BY jornada_id
+            ) pj ON pj.jornada_id = j.jornada_id
+            ORDER BY j.jornada_id DESC
+        """)
+        jornadas = [{
+            "jornada_id": r[0],
+            "jornada_nombre": r[1] or "",
+            "estatus": estatus_dict.get(r[2], "Desconocido"),
+            "total": r[3],
+        } for r in cursor.fetchall()]
+
+        cursor.execute("""
+            SELECT c.centro_id, c.centro_nombre, COALESCE(pc.total, 0)
+            FROM psi_centros c
+            LEFT JOIN (
+                SELECT centro_id, COUNT(*) AS total FROM psi_pacientes_x_centros GROUP BY centro_id
+            ) pc ON pc.centro_id = c.centro_id
+            ORDER BY c.centro_id DESC
+        """)
+        centros = [{
+            "centro_id": r[0],
+            "centro_nombre": r[1] or "",
+            "estatus": "",
+            "total": r[2],
+        } for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    return templates.TemplateResponse(request, "jornadas/copiar_beneficiarios.html", {
+        "request": request,
+        "usuario": usuario,
+        "pais": pais,
+        "modo": "jc",
+        "origenes": jornadas,
+        "destinos": centros,
+    })
+
+
+@app.get("/api/jornada_centro/beneficiarios")
+def api_beneficiarios_jornada_para_centro(request: Request, pais: str, origen_id: int, destino_id: int = 0):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    conn = get_connection(pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT p.persona_id, p.id_digisalud, p.persona_nombre, p.persona_apellido, p.persona_sexo,
+                   p.persona_fecha_nacimiento, e.escolaridad_escuela, e.escolaridad_grado, e.escolaridad_seccion,
+                   (d.persona_id IS NOT NULL) AS ya_en_destino
+            FROM psi_pacientes_x_jornada s
+            INNER JOIN psi_personas p ON p.persona_id = s.persona_id
+            LEFT JOIN psi_escolaridad e ON e.persona_id = s.persona_id AND e.jornada_id = s.jornada_id
+            LEFT JOIN psi_pacientes_x_centros d ON d.persona_id = s.persona_id AND d.centro_id = %s
+            WHERE s.jornada_id = %s
+            ORDER BY p.persona_apellido, p.persona_nombre
+        """, (destino_id, origen_id))
+        beneficiarios = []
+        for r in cursor.fetchall():
+            fecha = _fecha_iso(r[5])
+            beneficiarios.append({
+                "persona_id": str(r[0]),
+                "id_digisalud": r[1] or "",
+                "nombres": r[2] or "",
+                "apellidos": r[3] or "",
+                "sexo": (r[4] or "").strip().upper(),
+                "fecha_nacimiento": _dt.strptime(fecha, "%Y-%m-%d").strftime("%d/%m/%Y") if fecha else "",
+                "escuela": r[6] or "",
+                "grado": " ".join(x for x in (r[7], r[8]) if x),
+                "ya_en_destino": bool(r[9]),
+            })
+    finally:
+        conn.close()
+    return {"status": "ok", "beneficiarios": beneficiarios}
+
+
+class CopiaJornadaCentroIn(BaseModel):
+    pais: str
+    origen_id: int   # jornada
+    destino_id: int  # centro
+    persona_ids: list[int]
+
+
+@app.post("/api/jornada_centro/copiar_beneficiarios")
+def api_copiar_beneficiarios_jornada_centro(request: Request, datos: CopiaJornadaCentroIn):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if datos.pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+    persona_ids = sorted(set(datos.persona_ids))
+    if not persona_ids:
+        return _error_json(400, "Selecciona al menos un beneficiario.")
+    if len(persona_ids) > MAX_BENEFICIARIOS_COPIA:
+        return _error_json(400, f"No se pueden copiar más de {MAX_BENEFICIARIOS_COPIA} beneficiarios a la vez.")
+
+    user_id = _user_id_sesion(request)
+    conn = get_connection(datos.pais)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM psi_jornadas WHERE jornada_id = %s", (datos.origen_id,))
+        if not cursor.fetchone():
+            return _error_json(404, "La jornada origen no existe.")
+        cursor.execute("SELECT 1 FROM psi_centros WHERE centro_id = %s", (datos.destino_id,))
+        if not cursor.fetchone():
+            return _error_json(404, "El centro destino no existe.")
+
+        institucion_destino = _institucion_de_centro(cursor, datos.destino_id)
+        if institucion_destino is None:
+            return _error_json(400, "El centro destino no tiene una institución asociada (o tiene más de una).")
+
+        ph = _placeholders(len(persona_ids))
+
+        # Solo se copian personas que realmente están en la jornada origen.
+        cursor.execute(
+            f"SELECT persona_id, persona_id_responsable FROM psi_pacientes_x_jornada "
+            f"WHERE jornada_id = %s AND persona_id IN ({ph})",
+            [datos.origen_id] + persona_ids
+        )
+        en_origen = {r[0]: r[1] for r in cursor.fetchall()}
+
+        cursor.execute(
+            f"SELECT persona_id FROM psi_pacientes_x_centros WHERE centro_id = %s AND persona_id IN ({ph})",
+            [datos.destino_id] + persona_ids
+        )
+        ya_en_destino = {r[0] for r in cursor.fetchall()}
+
+        a_copiar = [pid for pid in persona_ids if pid in en_origen and pid not in ya_en_destino]
+        no_en_origen = len([pid for pid in persona_ids if pid not in en_origen])
+
+        if not a_copiar:
+            return {
+                "status": "ok",
+                "mensaje": "No había beneficiarios nuevos para copiar.",
+                "copiados": 0, "autorizaciones": 0, "escolaridades": 0,
+                "ya_en_destino": len(ya_en_destino), "no_en_origen": no_en_origen,
+            }
+
+        ph_copiar = _placeholders(len(a_copiar))
+        ahora = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # persona_id_responsable puede no existir en la tabla de centros.
+        if _tabla_tiene_columna(cursor, "psi_pacientes_x_centros", "persona_id_responsable"):
+            cursor.executemany(
+                "INSERT INTO psi_pacientes_x_centros (persona_id, centro_id, institucion_id, pac_x_centro_status, "
+                "persona_id_responsable, control_fecha_creacion, control_usuario_creacion) "
+                "VALUES (%s, %s, %s, 0, %s, %s, %s)",
+                [(pid, datos.destino_id, institucion_destino, en_origen[pid], ahora, user_id) for pid in a_copiar]
+            )
+        else:
+            cursor.executemany(
+                "INSERT INTO psi_pacientes_x_centros (persona_id, centro_id, institucion_id, pac_x_centro_status, "
+                "control_fecha_creacion, control_usuario_creacion) "
+                "VALUES (%s, %s, %s, 0, %s, %s)",
+                [(pid, datos.destino_id, institucion_destino, ahora, user_id) for pid in a_copiar]
+            )
+
+        cursor.execute(
+            f"SELECT persona_id, autorizacion_id FROM psi_aut_pac_x_jornada "
+            f"WHERE jornada_id = %s AND persona_id IN ({ph_copiar})",
+            [datos.origen_id] + a_copiar
+        )
+        autorizaciones = [(r[0], datos.destino_id, r[1]) for r in cursor.fetchall()]
+        if autorizaciones:
+            cursor.executemany(
+                "INSERT INTO psi_aut_pac_x_centro (persona_id, centro_id, autorizacion_id) VALUES (%s, %s, %s)",
+                autorizaciones
+            )
+
+        cursor.execute(
+            f"SELECT persona_id, escolaridad_grado, escolaridad_seccion, escolaridad_turno, escolaridad_escuela "
+            f"FROM psi_escolaridad WHERE jornada_id = %s AND persona_id IN ({ph_copiar})",
+            [datos.origen_id] + a_copiar
+        )
+        escolaridades = [(r[0], datos.destino_id, r[1], r[2], r[3], r[4]) for r in cursor.fetchall()]
+        if escolaridades:
+            cursor.executemany(
+                "INSERT INTO psi_escolaridad_centro (persona_id, centro_id, escolaridad_grado, escolaridad_seccion, "
+                "escolaridad_turno, escolaridad_escuela) VALUES (%s, %s, %s, %s, %s, %s)",
+                escolaridades
+            )
+
+        conn.commit()
+        logger.info(
+            "Copia de beneficiarios jornada %s -> centro %s: %s pacientes, %s autorizaciones, %s escolaridades (usuario_id=%s)",
+            datos.origen_id, datos.destino_id, len(a_copiar), len(autorizaciones), len(escolaridades), user_id
+        )
+        return {
+            "status": "ok",
+            "mensaje": "Se copió 1 beneficiario." if len(a_copiar) == 1 else f"Se copiaron {len(a_copiar)} beneficiarios.",
+            "copiados": len(a_copiar),
+            "autorizaciones": len(autorizaciones),
+            "escolaridades": len(escolaridades),
+            "ya_en_destino": len(ya_en_destino),
+            "no_en_origen": no_en_origen,
+        }
+
+    except IntegrityError as e:
+        conn.rollback()
+        if es_error_duplicado_mysql(e):
+            return _error_json(409, "Algún beneficiario fue agregado al centro destino mientras copiabas. Recarga la lista e intenta de nuevo.")
+        logger.exception("Error de integridad copiando beneficiarios jornada %s -> centro %s", datos.origen_id, datos.destino_id)
+        return _error_json(500, "No se pudieron copiar los beneficiarios. No se guardó ningún cambio.")
+    except Exception:
+        conn.rollback()
+        logger.exception("Error copiando beneficiarios jornada %s -> centro %s", datos.origen_id, datos.destino_id)
         return _error_json(500, "No se pudieron copiar los beneficiarios. No se guardó ningún cambio.")
     finally:
         conn.close()

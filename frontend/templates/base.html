@@ -240,16 +240,22 @@
     .modal-title{font-weight:800}
     .modal-footer{border-top:1px solid var(--ds-border)}
 
+    /* Variables de Bootstrap: sin ellas, .btn:hover/:active dejan el fondo transparente y el texto blanco desaparece */
     .btn-save{
-      background:var(--ds-coral);
-      color:#fff;
+      --bs-btn-bg:var(--ds-coral);
+      --bs-btn-color:#fff;
+      --bs-btn-hover-bg:#f04a45;
+      --bs-btn-hover-color:#fff;
+      --bs-btn-active-bg:#e0403b;
+      --bs-btn-active-color:#fff;
+      --bs-btn-disabled-bg:#f3b1ae;
+      --bs-btn-disabled-color:#fff;
+      --bs-btn-focus-shadow-rgb:255,92,87;
       border:0;
       border-radius:9px;
       font-weight:700;
       padding:.5rem 1.5rem;
     }
-
-    .btn-save:hover{filter:brightness(.95);color:#fff}
 
     /* Toasts */
     .toast-container{z-index:1080}

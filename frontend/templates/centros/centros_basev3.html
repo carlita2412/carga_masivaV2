@@ -1,0 +1,355 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  :root{
+    --ds-coral:#ff5c57;
+    --ds-muted:#667085;
+    --ds-border:#e4e7ec;
+  }
+
+  .toolbar-card,
+  .table-card{
+    background:#fff;
+    border:1px solid var(--ds-border);
+    border-radius:16px;
+    box-shadow:0 8px 25px rgba(16,24,40,.05);
+  }
+
+  .toolbar-card{padding:20px;margin-top:24px}
+  .table-card{overflow:hidden}
+
+  .form-label{font-size:.86rem;font-weight:700;color:#344054;margin-bottom:.42rem}
+
+  .form-control,
+  .form-select{min-height:44px;border-radius:10px;border-color:#d0d5dd}
+
+  .form-control:focus,
+  .form-select:focus{
+    border-color:#ff9a95;
+    box-shadow:0 0 0 .2rem rgba(255,92,87,.12);
+  }
+
+  .btn-filter{
+    min-height:44px;border-radius:10px;border:0;
+    background:var(--ds-coral);color:#fff;font-weight:700;padding:0 18px;
+  }
+  .btn-filter:hover{color:#fff;filter:brightness(.98)}
+
+  .btn-clear{
+    min-height:44px;border-radius:10px;border:1px solid #d0d5dd;
+    background:#fff;color:#475467;font-weight:700;padding:0 16px;
+    display:inline-flex;align-items:center;text-decoration:none;
+  }
+  .btn-clear:hover{background:#f2f4f7}
+
+  .summary-row{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0}
+  .summary-pill{
+    background:#fff;border:1px solid var(--ds-border);border-radius:12px;
+    padding:12px 15px;display:flex;align-items:center;gap:10px;min-width:165px;
+  }
+  .summary-icon{
+    width:36px;height:36px;border-radius:10px;display:grid;place-items:center;
+    background:#f2f4f7;color:var(--ds-muted);font-size:1rem;
+  }
+  .summary-value{font-weight:800;line-height:1.05;font-size:1.1rem}
+  .summary-label{color:var(--ds-muted);font-size:.78rem}
+
+  .table-card-head{
+    padding:18px 20px;border-bottom:1px solid var(--ds-border);
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .table-card-head h2{font-size:1.05rem;font-weight:800;margin:0}
+
+  table{margin:0 !important;min-width:650px}
+
+  thead th{
+    background:#f8fafc !important;color:#475467 !important;
+    font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;
+    border-bottom:1px solid var(--ds-border) !important;
+    padding:13px 15px !important;white-space:nowrap;
+  }
+
+  tbody td{padding:14px 15px !important;vertical-align:middle;border-color:#eef0f3 !important}
+  tbody tr:hover{background:#fffaf9}
+
+  .centro-name{font-weight:700;color:#25324a}
+
+  .id-badge{
+    display:inline-flex;align-items:center;justify-content:center;
+    padding:5px 9px;border-radius:8px;background:#f2f4f7;color:#475467;
+    font-size:.82rem;font-weight:700;
+  }
+
+  .actions-col{display:flex;gap:7px}
+
+  .icon-btn{
+    width:36px;height:36px;border:1px solid var(--ds-border);border-radius:9px;
+    display:grid;place-items:center;background:#fff;color:#475467;
+    cursor:pointer;transition:.2s;text-decoration:none;
+  }
+  .icon-btn:hover{transform:translateY(-1px);box-shadow:0 3px 8px rgba(16,24,40,.08);color:inherit}
+  .icon-btn.edit:hover{color:#b7791f;border-color:#f3c75f;background:#fffaf0}
+
+  .results-text{color:var(--ds-muted);font-size:.86rem}
+
+  .table-footer{
+    padding:14px 20px;border-top:1px solid var(--ds-border);
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+
+  .per-page-select{min-height:34px;width:auto;border-radius:8px}
+
+  .pagination .page-link{color:#475467;border-color:var(--ds-border)}
+  .pagination .active .page-link{background:var(--ds-coral);border-color:var(--ds-coral);color:#fff}
+
+  .modal-content{border:0;border-radius:16px;overflow:hidden;box-shadow:0 18px 50px rgba(16,24,40,.18)}
+  .modal-header{background:#fff;border-bottom:1px solid var(--ds-border)}
+  .modal-title{font-weight:800}
+  .modal-footer{border-top:1px solid var(--ds-border)}
+
+  .input-group-text{border-color:#d0d5dd;border-radius:10px 0 0 10px;color:var(--ds-muted)}
+  .input-group .form-control{border-radius:0 10px 10px 0}
+
+  .eyebrow{
+    color:var(--ds-coral);text-transform:uppercase;font-size:.78rem;
+    letter-spacing:.08em;font-weight:800;margin-bottom:4px;
+  }
+  .page-title{font-size:1.8rem;font-weight:800;margin:0 0 4px}
+  .page-subtitle{color:var(--ds-muted);margin:0}
+</style>
+
+<div class="container-fluid px-0" style="max-width:1280px;">
+
+  <div>
+    <div class="eyebrow">Administración</div>
+    <h1 class="page-title">Gestión de Centros</h1>
+    <p class="page-subtitle">Consulta los centros y actualiza su nombre.</p>
+  </div>
+
+  <!-- Filtros -->
+  <section class="toolbar-card">
+    <form method="get" class="row g-3 align-items-end" id="filtrosForm">
+      <input type="hidden" name="por_pagina" value="{{ por_pagina }}">
+      <div class="col-md-4">
+        <label class="form-label" for="pais">País</label>
+        <select id="pais" name="pais" class="form-select">
+          <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+          <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+          <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
+        </select>
+      </div>
+
+      <div class="col-md-5">
+        <label class="form-label" for="buscar">Buscar centro</label>
+        <div class="input-group">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input id="buscar" name="buscar" value="{{ buscar }}" class="form-control" placeholder="Nombre o ID de centro">
+        </div>
+      </div>
+
+      <div class="col-md-3 d-flex gap-2">
+        <button type="submit" class="btn-filter flex-grow-1">
+          <i class="bi bi-funnel me-1"></i> Filtrar
+        </button>
+        <a href="/centros/v2?pais={{ pais }}" class="btn-clear" title="Limpiar filtros">
+          <i class="bi bi-arrow-counterclockwise"></i>
+        </a>
+      </div>
+    </form>
+  </section>
+
+  <!-- Resumen -->
+  <div class="summary-row">
+    <div class="summary-pill">
+      <div class="summary-icon"><i class="bi bi-building"></i></div>
+      <div><div class="summary-value">{{ total }}</div><div class="summary-label">Centros encontrados</div></div>
+    </div>
+  </div>
+
+  <!-- Tabla -->
+  <section class="table-card">
+    <div class="table-card-head">
+      <h2>Listado de centros</h2>
+      <div class="d-flex align-items-center gap-2">
+        <label class="results-text mb-0" for="porPagina">Mostrar los últimos</label>
+        <select id="porPagina" class="form-select form-select-sm per-page-select">
+          {% for n in opciones_por_pagina %}
+          <option value="{{ n }}" {% if n == por_pagina %}selected{% endif %}>{{ n if n else 'Todos' }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    {% if centros %}
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th style="width:90px;">ID</th>
+            <th>Nombre</th>
+            <th style="width:170px;">Beneficiarios</th>
+            <th style="width:100px;">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in centros %}
+          <tr>
+            <td><span class="id-badge">{{ c.centro_id }}</span></td>
+            <td><span class="centro-name">{{ c.centro_nombre }}</span></td>
+            <td>{{ c.total_beneficiarios }}</td>
+            <td>
+              <div class="actions-col">
+                <button class="icon-btn edit" title="Editar nombre"
+                  data-id="{{ c.centro_id }}" data-nombre="{{ c.centro_nombre }}">
+                  <i class="bi bi-pencil-square"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% set desde = (pagina - 1) * por_pagina + 1 if por_pagina else 1 %}
+    <div class="table-footer">
+      <div class="results-text">
+        Mostrando {{ desde }}–{{ desde + centros|length - 1 }} de {{ total }} centro{{ 's' if total != 1 }}
+      </div>
+      {% if total_paginas > 1 %}
+      <nav aria-label="Paginación de centros">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if pagina <= 1 %}disabled{% endif %}">
+            <a class="page-link" href="#" data-pagina="{{ pagina - 1 }}" aria-label="Anterior">&laquo;</a>
+          </li>
+          {% if pagina > 3 %}
+          <li class="page-item"><a class="page-link" href="#" data-pagina="1">1</a></li>
+          {% if pagina > 4 %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}
+          {% endif %}
+          {% for p in range([1, pagina - 2]|max, [total_paginas, pagina + 2]|min + 1) %}
+          <li class="page-item {% if p == pagina %}active{% endif %}">
+            <a class="page-link" href="#" data-pagina="{{ p }}">{{ p }}</a>
+          </li>
+          {% endfor %}
+          {% if pagina < total_paginas - 2 %}
+          {% if pagina < total_paginas - 3 %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}
+          <li class="page-item"><a class="page-link" href="#" data-pagina="{{ total_paginas }}">{{ total_paginas }}</a></li>
+          {% endif %}
+          <li class="page-item {% if pagina >= total_paginas %}disabled{% endif %}">
+            <a class="page-link" href="#" data-pagina="{{ pagina + 1 }}" aria-label="Siguiente">&raquo;</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <i class="bi bi-building-x"></i>
+      <div class="fw-bold mb-1">No se encontraron centros</div>
+      <div>Ajusta el texto de búsqueda.</div>
+    </div>
+    {% endif %}
+  </section>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="centroModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title">Editar nombre de centro</h5>
+          <div class="text-secondary small">Actualiza únicamente el nombre visible.</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="modalInputField">Nombre del centro</label>
+        <input class="form-control" id="modalInputField" maxlength="255">
+        <div class="invalid-feedback">El nombre es obligatorio.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-light border" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-save" id="centroModalAceptar">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PAIS = {{ pais|tojson }};
+let centroId = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+  const modalEl = document.getElementById("centroModal");
+  const input = document.getElementById("modalInputField");
+  const btn = document.getElementById("centroModalAceptar");
+
+  document.querySelectorAll(".icon-btn.edit").forEach(b => {
+    b.addEventListener("click", () => {
+      centroId = b.dataset.id;
+      input.value = b.dataset.nombre;
+      input.classList.remove("is-invalid");
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    });
+  });
+
+  input.addEventListener("input", () => input.classList.remove("is-invalid"));
+  input.addEventListener("keydown", ev => { if (ev.key === "Enter") btn.click(); });
+
+  btn.addEventListener("click", async () => {
+    const nombre = input.value.trim();
+    if (!nombre) { input.classList.add("is-invalid"); return; }
+
+    const formData = new FormData();
+    formData.append("accion", "editar-nombre");
+    formData.append("pais", PAIS);
+    formData.append("centro_id", centroId);
+    formData.append("nuevo_nombre", nombre);
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+    try {
+      const resp = await fetch("/centros/v2/accion", { method: "POST", body: formData, credentials: "include" });
+      if (resp.status === 401) { window.location.href = "/login"; return; }
+      const data = await resp.json();
+      if (!resp.ok || data.status !== "ok") throw new Error(data.mensaje || "No se pudo guardar el cambio.");
+      bootstrap.Modal.getInstance(modalEl).hide();
+      location.reload();
+    } catch (e) {
+      mostrarToast(e.message || "No se pudo guardar el cambio.", "error");
+      btn.disabled = false;
+      btn.innerHTML = "Guardar cambios";
+    }
+  });
+
+  function irA(cambios) {
+    const params = new URLSearchParams(window.location.search);
+    Object.entries(cambios).forEach(([k, v]) => params.set(k, v));
+    window.location.search = params.toString();
+  }
+
+  document.getElementById("porPagina").addEventListener("change", function () {
+    irA({ por_pagina: this.value, pagina: 1 });
+  });
+
+  document.querySelectorAll(".pagination a[data-pagina]").forEach(a => {
+    a.addEventListener("click", ev => {
+      ev.preventDefault();
+      if (!a.closest(".page-item").classList.contains("disabled")) irA({ pagina: a.dataset.pagina });
+    });
+  });
+
+  // Búsqueda automática después de 4 caracteres
+  const buscarInput = document.getElementById("buscar");
+  let debounceTimer;
+  buscarInput.addEventListener("input", function () {
+    clearTimeout(debounceTimer);
+    const valor = this.value.trim();
+    if (valor.length >= 4 || valor.length === 0) {
+      debounceTimer = setTimeout(() => buscarInput.form.submit(), 500);
+    }
+  });
+});
+</script>
+{% endblock %}

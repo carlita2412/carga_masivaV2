@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
+{% set es_jc = modo is defined and modo == 'jc' %}
 <style>
   .table-card{overflow:hidden}
 
@@ -84,9 +85,9 @@
 <div class="container-fluid px-0" style="max-width:1280px;">
 
   <div>
-    <div class="eyebrow">Jornadas</div>
-    <h1 class="page-title">Copiar beneficiarios entre jornadas</h1>
-    <p class="page-subtitle">Inscribe en una jornada destino a los beneficiarios de otra jornada. Desmarca a quienes no asistirán.</p>
+    <div class="eyebrow">{{ 'Centros' if es_jc else 'Jornadas' }}</div>
+    <h1 class="page-title">{{ 'Copiar beneficiarios de una jornada a un centro' if es_jc else 'Copiar beneficiarios entre jornadas' }}</h1>
+    <p class="page-subtitle">Inscribe en {{ 'un centro destino a los beneficiarios de una jornada' if es_jc else 'una jornada destino a los beneficiarios de otra jornada' }}. Desmarca a quienes no asistirán.</p>
   </div>
 
   <!-- Selección de jornadas -->
@@ -112,7 +113,7 @@
       </div>
 
       <div class="col-lg-5">
-        <label class="form-label" for="destino">Jornada destino</label>
+        <label class="form-label" for="destino">{{ 'Centro destino' if es_jc else 'Jornada destino' }}</label>
         <input type="search" class="form-control select-filter" id="filtroDestino" placeholder="Filtrar por ID o nombre…">
         <select id="destino" class="form-select" size="1"></select>
       </div>
@@ -141,7 +142,7 @@
 
     <div id="estado" class="empty-state">
       <i class="bi bi-people"></i>
-      <div class="fw-bold mb-1">Selecciona la jornada origen y la de destino</div>
+      <div class="fw-bold mb-1">Selecciona la jornada origen y {{ 'el centro' if es_jc else 'la jornada' }} de destino</div>
       <div>Se mostrará la lista de beneficiarios de la jornada origen.</div>
     </div>
 
@@ -173,7 +174,18 @@
 </div>
 
 <script>
-const JORNADAS = {{ jornadas|tojson }};
+const ES_JC = {{ es_jc|tojson }};
+const normalizar = lista => lista.map(x => ({
+  id: x.jornada_id ?? x.centro_id,
+  nombre: x.jornada_nombre ?? x.centro_nombre,
+  estatus: x.estatus || "",
+  total: x.total,
+}));
+const ORIGENES = normalizar({{ (origenes if es_jc else jornadas)|tojson }});
+const DESTINOS = ES_JC ? normalizar({{ (destinos if es_jc else [])|tojson }}) : ORIGENES;
+const TIPO_DESTINO = ES_JC ? "centro" : "jornada";
+const API_LISTA = ES_JC ? "/api/jornada_centro/beneficiarios" : "/api/jornadas/beneficiarios";
+const API_COPIA = ES_JC ? "/api/jornada_centro/copiar_beneficiarios" : "/api/jornadas/copiar_beneficiarios";
 const PAIS = {{ pais|tojson }};
 let beneficiarios = [];
 let seleccion = new Set();
@@ -182,26 +194,26 @@ let solicitudActual = 0;
 
 const $ = id => document.getElementById(id);
 
-function textoJornada(j) {
-  return `${j.jornada_id} · ${j.jornada_nombre} — ${j.estatus} (${j.total} benef.)`;
+function textoItem(j) {
+  return `${j.id} · ${j.nombre}${j.estatus ? " — " + j.estatus : ""} (${j.total} benef.)`;
 }
 
-function poblarSelect(select, filtro, excluirId, placeholder) {
+function poblarSelect(select, lista, filtro, excluirId, placeholder) {
   const actual = select.value;
   const f = filtro.trim().toLowerCase();
   select.innerHTML = "";
   const ph = new Option(placeholder, "");
   select.add(ph);
-  JORNADAS
-    .filter(j => String(j.jornada_id) !== String(excluirId))
-    .filter(j => !f || String(j.jornada_id).includes(f) || j.jornada_nombre.toLowerCase().includes(f))
-    .forEach(j => select.add(new Option(textoJornada(j), j.jornada_id)));
+  lista
+    .filter(j => ES_JC || String(j.id) !== String(excluirId))
+    .filter(j => !f || String(j.id).includes(f) || j.nombre.toLowerCase().includes(f))
+    .forEach(j => select.add(new Option(textoItem(j), j.id)));
   if ([...select.options].some(o => o.value === actual)) select.value = actual;
 }
 
 function refrescarSelects() {
-  poblarSelect($("origen"), $("filtroOrigen").value, $("destino").value, "— Elige la jornada origen —");
-  poblarSelect($("destino"), $("filtroDestino").value, $("origen").value, "— Elige la jornada destino —");
+  poblarSelect($("origen"), ORIGENES, $("filtroOrigen").value, $("destino").value, "— Elige la jornada origen —");
+  poblarSelect($("destino"), DESTINOS, $("filtroDestino").value, $("origen").value, `— Elige ${ES_JC ? "el centro" : "la jornada"} destino —`);
 }
 
 function mostrarEstado(icono, titulo, detalle) {
@@ -300,13 +312,13 @@ async function cargarBeneficiarios() {
   beneficiarios = []; seleccion = new Set();
   actualizarContadores();
 
-  if (!origen) return mostrarEstado("bi-people", "Selecciona la jornada origen y la de destino", "Se mostrará la lista de beneficiarios de la jornada origen.");
+  if (!origen) return mostrarEstado("bi-people", `Selecciona la jornada origen y ${ES_JC ? "el centro" : "la jornada"} de destino`, "Se mostrará la lista de beneficiarios de la jornada origen.");
 
   const id = ++solicitudActual;
   mostrarEstado("bi-hourglass-split", "Cargando beneficiarios…");
   try {
     const params = new URLSearchParams({ pais: PAIS, origen_id: origen, destino_id: destino || 0 });
-    const resp = await fetch(`/api/jornadas/beneficiarios?${params}`, { credentials: "include" });
+    const resp = await fetch(`${API_LISTA}?${params}`, { credentials: "include" });
     if (resp.status === 401) { window.location.href = "/login"; return; }
     const data = await resp.json();
     if (id !== solicitudActual) return;
@@ -324,7 +336,7 @@ async function cargarBeneficiarios() {
       $("tablaWrap").classList.remove("d-none");
       renderTabla();
     }
-    if (!destino && beneficiarios.length) mostrarToast("Elige ahora la jornada destino.", "info");
+    if (!destino && beneficiarios.length) mostrarToast(`Elige ahora ${ES_JC ? "el centro" : "la jornada"} destino.`, "info");
   } catch (e) {
     if (id === solicitudActual) mostrarEstado("bi-exclamation-triangle", "No se pudo cargar la lista", e.message || "");
   }
@@ -337,7 +349,7 @@ async function copiar() {
   btn.disabled = true;
   $("btnCopiarTexto").textContent = "Copiando…";
   try {
-    const resp = await fetch("/api/jornadas/copiar_beneficiarios", {
+    const resp = await fetch(API_COPIA, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -351,7 +363,7 @@ async function copiar() {
     const lista = document.createElement("ul");
     lista.className = "mb-0";
     [
-      `${data.copiados} beneficiarios inscritos en la jornada destino`,
+      `${data.copiados} beneficiarios inscritos en ${ES_JC ? "el centro" : "la jornada"} destino`,
       `${data.autorizaciones} autorizaciones copiadas`,
       `${data.escolaridades} registros de escolaridad copiados`,
     ].forEach(t => { const li = document.createElement("li"); li.textContent = t; lista.append(li); });
@@ -363,7 +375,7 @@ async function copiar() {
     okBtn.removeAttribute("onclick");
     new bootstrap.Modal($("successModal")).show();
 
-    const destinoJ = JORNADAS.find(j => String(j.jornada_id) === destino.value);
+    const destinoJ = DESTINOS.find(j => String(j.id) === destino.value);
     if (destinoJ) destinoJ.total += data.copiados;
     refrescarSelects();
     await cargarBeneficiarios();
@@ -403,11 +415,11 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btnNinguno").addEventListener("click", () => marcarVisibles(false));
 
   $("btnCopiar").addEventListener("click", () => {
-    const o = JORNADAS.find(j => String(j.jornada_id) === $("origen").value);
-    const d = JORNADAS.find(j => String(j.jornada_id) === $("destino").value);
+    const o = ORIGENES.find(j => String(j.id) === $("origen").value);
+    const d = DESTINOS.find(j => String(j.id) === $("destino").value);
     const n = seleccion.size;
     confirmarAccion(
-      `Se inscribirán ${n} beneficiario${n !== 1 ? "s" : ""} de "${o.jornada_nombre}" en la jornada "${d.jornada_nombre}" (con sus autorizaciones y escolaridad). ¿Continuar?`,
+      `Se inscribirán ${n} beneficiario${n !== 1 ? "s" : ""} de "${o.nombre}" en ${ES_JC ? "el centro" : "la jornada"} "${d.nombre}" (con sus autorizaciones y escolaridad). ¿Continuar?`,
       copiar
     );
   });
