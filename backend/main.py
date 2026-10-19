@@ -735,6 +735,14 @@ async def cargar_excel_pesquisa_antropometrica(
             return {"status": "error", "mensaje": error_archivo}
         df = pd.read_excel(BytesIO(content), header=1)
 
+        # Los usuarios a veces renombran la columna como "Observaciones" o
+        # "observacion": se normaliza (sin importar mayúsculas, plural ni espacios).
+        df = df.rename(columns={
+            col: "OBSERVACION"
+            for col in df.columns
+            if str(col).strip().upper() in ("OBSERVACION", "OBSERVACIONES")
+        })
+
         columnas_obligatorias = [
             "Id Digisalud Beneficiario",
             "PESO",
