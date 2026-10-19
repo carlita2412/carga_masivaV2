@@ -2338,3 +2338,111 @@ def api_duplicados_posibles(request: Request, pais: str):
         return _error_json(500, "No se pudo generar la lista de posibles duplicados.")
     finally:
         conn.close()
+
+
+# ---------------------------------------------------
+# EVALUACIONES DUPLICADAS EN CENTROS
+# Detecta mediciones repetidas (misma persona, centro, tipo de pesquisa y fecha) por recargas del
+# Excel y permite eliminar las sobrantes. Solo aplica a centros: en jornadas no se permite evaluar
+# dos veces a la misma persona. La lógica vive en backend/services/evaluaciones_duplicadas.py.
+# ---------------------------------------------------
+from backend.services import evaluaciones_duplicadas as evdup
+
+
+@app.get("/centros/v2/evaluaciones-duplicadas", response_class=HTMLResponse)
+def evaluaciones_duplicadas(request: Request, pais: str = "vzla"):
+    usuario = _usuario_autenticado(request)
+    if not usuario:
+        return RedirectResponse(url="/login", status_code=302)
+    if pais not in PAISES_VALIDOS:
+        pais = "vzla"
+    return templates.TemplateResponse(request, "centros/evaluaciones_duplicadas.html", {
+        "request": request,
+        "usuario": usuario,
+        "pais": pais,
+    })
+
+
+def _evdup_lectura(request: Request, pais: str, funcion, contexto: str):
+    """Ejecuta una consulta de solo lectura del servicio con sesión, país y manejo de errores comunes."""
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+    conn = get_connection(pais)
+    try:
+        return {"status": "ok", **funcion(conn.cursor())}
+    except evdup.EvaluacionesError as e:
+        return _error_json(400, str(e))
+    except Exception:
+        logger.exception("Error en evaluaciones duplicadas (%s)", contexto)
+        return _error_json(500, "No se pudo completar la consulta.")
+    finally:
+        conn.close()
+
+
+@app.get("/api/eval_dup/clientes")
+def api_evdup_clientes(request: Request, pais: str):
+    return _evdup_lectura(request, pais, lambda cur: {"clientes": evdup.listar_clientes(cur)}, "clientes")
+
+
+@app.get("/api/eval_dup/centros")
+def api_evdup_centros(request: Request, pais: str, organizacion_id: int):
+    return _evdup_lectura(request, pais, lambda cur: {"centros": evdup.listar_centros(cur, organizacion_id)}, "centros")
+
+
+@app.get("/api/eval_dup/beneficiarios")
+def api_evdup_beneficiarios(request: Request, pais: str, centro_id: int, todos: bool = False):
+    return _evdup_lectura(request, pais, lambda cur: evdup.beneficiarios_del_centro(cur, centro_id, todos), "beneficiarios")
+
+
+@app.get("/api/eval_dup/detalle")
+def api_evdup_detalle(request: Request, pais: str, centro_id: int, persona_id: int):
+    return _evdup_lectura(request, pais, lambda cur: evdup.detalle_beneficiario(cur, centro_id, persona_id), "detalle")
+
+
+class EvalDupIn(BaseModel):
+    pais: str
+    centro_id: int
+    modo: str                                   # 'seleccion' (un beneficiario) o 'exactas' (solo copias idénticas)
+    persona_id: int | None = None
+    conservar: dict[str, int] = {}              # {fecha ISO: nº de carga que se conserva}
+    esperado: int | None = None                 # total que vio el usuario en la vista previa
+
+
+@app.post("/api/eval_dup/plan")
+def api_evdup_plan(request: Request, datos: EvalDupIn):
+    def calcular(cur):
+        plan = evdup.construir_plan(cur, datos.centro_id, datos.modo, datos.persona_id, datos.conservar)
+        return {"total": plan["total"], "beneficiarios": plan["beneficiarios"]}
+    return _evdup_lectura(request, datos.pais, calcular, "plan")
+
+
+@app.post("/api/eval_dup/eliminar")
+def api_evdup_eliminar(request: Request, datos: EvalDupIn):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if datos.pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    user_id = _user_id_sesion(request)
+    conn = get_connection(datos.pais)
+    try:
+        resultado = evdup.eliminar_repetidas(
+            conn.cursor(), datos.centro_id, datos.modo, datos.persona_id, datos.conservar, datos.esperado
+        )
+        conn.commit()
+        logger.info(
+            "Evaluaciones repetidas eliminadas en %s centro=%s modo=%s persona=%s: %s filas, %s beneficiarios (usuario_id=%s)",
+            datos.pais, datos.centro_id, datos.modo, datos.persona_id, resultado["eliminadas"], resultado["beneficiarios"], user_id
+        )
+        return {"status": "ok", "mensaje": "Evaluaciones repetidas eliminadas.", **resultado}
+    except evdup.EvaluacionesError as e:
+        conn.rollback()
+        return _error_json(409, str(e))
+    except Exception:
+        conn.rollback()
+        logger.exception("Error eliminando evaluaciones repetidas centro=%s", datos.centro_id)
+        return _error_json(500, "No se pudieron eliminar las evaluaciones. No se guardó ningún cambio.")
+    finally:
+        conn.close()

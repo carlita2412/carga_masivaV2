@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .table-card{overflow:hidden}
+  .table-card-head{padding:18px 20px;border-bottom:1px solid var(--ds-border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .table-card-head h2{font-size:1.05rem;font-weight:800;margin:0}
+  .table-scroll{max-height:520px;overflow:auto}
+  table{margin:0 !important}
+  thead th{position:sticky;top:0;z-index:1;background:#f8fafc !important;color:#475467 !important;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ds-border) !important;padding:12px 14px !important;white-space:nowrap}
+  tbody td{padding:10px 14px !important;vertical-align:middle;border-color:#eef0f3 !important}
+  #tbodyLista tr:hover{background:#fffaf9}
+
+  .id-badge{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8rem;font-weight:700;background:#f2f4f7;color:#344054;padding:4px 8px;border-radius:7px;white-space:nowrap}
+  .tag{display:inline-block;padding:4px 9px;border-radius:999px;font-size:.74rem;font-weight:800;white-space:nowrap}
+  .tag-gris{background:#f2f4f7;color:#475467}
+  .tag-azul{background:#eef4ff;color:#3559c7}
+  .tag-ambar{background:#fffaeb;color:#b54708}
+  .tag-verde{background:#ecfdf3;color:#027a48}
+
+  .tile{background:#fff;border:1px solid var(--ds-border);border-radius:14px;padding:14px 16px;height:100%}
+  .tile .num{font-size:1.7rem;font-weight:800;line-height:1.1}
+  .tile .lbl{font-size:.8rem;color:var(--ds-muted)}
+  .tile.alerta{background:#fffaeb;border-color:#fedf89}
+  .tile.alerta .num{color:#b54708}
+
+  .btn-main{min-height:44px;border-radius:10px;border:0;background:var(--ds-coral);color:#fff;font-weight:700;padding:0 20px}
+  .btn-main:disabled{background:#f3b1ae;cursor:not-allowed}
+  .btn-main:not(:disabled):hover{filter:brightness(.97);color:#fff}
+  .btn-sm-main{min-height:34px;border-radius:9px;border:0;background:var(--ds-coral);color:#fff;font-weight:700;padding:0 14px;font-size:.85rem}
+  .btn-sm-main:hover{filter:brightness(.97);color:#fff}
+  .action-bar{padding:16px 20px;border-top:1px solid var(--ds-border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .input-group-text{border-color:#d0d5dd;border-radius:10px 0 0 10px;color:var(--ds-muted)}
+  .input-group .form-control{border-radius:0 10px 10px 0}
+  .form-check-input{width:1.15rem;height:1.15rem;cursor:pointer}
+  .form-check-input:checked{background-color:var(--ds-coral);border-color:var(--ds-coral)}
+
+  .banda{border-radius:14px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-top:16px}
+  .banda.limpia{background:#ecfdf3;border:1px solid #abefc6;color:#05603a}
+  .banda.aviso{background:#fffaeb;border:1px solid #fedf89;color:#7a2e0e}
+
+  .persona-cab{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .persona-cab .nom{font-size:1.25rem;font-weight:800}
+  .fecha-card{background:#fff;border:1px solid var(--ds-border);border-radius:16px;overflow:hidden;margin-top:16px}
+  .fecha-card .cab{padding:14px 18px;border-bottom:1px solid var(--ds-border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .fecha-card .cab .t{font-weight:800}
+  .th-copia{min-width:150px;text-align:center}
+  .th-copia label{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;font-weight:700;text-transform:none;letter-spacing:0;font-size:.82rem;color:#344054}
+  .th-copia small{font-weight:500;color:var(--ds-muted)}
+  .th-copia.elegida{background:#ecfdf3 !important;box-shadow:inset 0 -3px 0 #12b76a}
+  td.c-valor{text-align:center;font-variant-numeric:tabular-nums}
+  td.c-valor.se-elimina{color:#b42318;text-decoration:line-through;background:#fef3f2}
+  td.c-valor.se-queda{background:#f6fef9;font-weight:700}
+  td.c-valor.difiere{box-shadow:inset 0 0 0 2px #fedf89}
+  td.c-valor.vacio{color:#c0c6d0}
+</style>
+
+<div class="container-fluid px-0" style="max-width:1280px;">
+
+  <div>
+    <div class="eyebrow">Centros</div>
+    <h1 class="page-title">Evaluaciones duplicadas</h1>
+    <p class="page-subtitle">Detecta las mediciones que quedaron repetidas en un centro (por ejemplo, un Excel cargado varias veces) y elimina las copias sobrantes.</p>
+  </div>
+
+  <!-- Filtros -->
+  <section class="toolbar-card">
+    <div class="row g-3 align-items-end">
+      <div class="col-lg-2">
+        <label class="form-label" for="pais">Plataforma</label>
+        <select id="pais" class="form-select">
+          <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+          <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+          <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
+        </select>
+      </div>
+      <div class="col-lg-4">
+        <label class="form-label" for="cliente">Cliente</label>
+        <select id="cliente" class="form-select"><option value="">Cargando…</option></select>
+      </div>
+      <div class="col-lg-6">
+        <label class="form-label" for="centro">Centro</label>
+        <select id="centro" class="form-select" disabled><option value="">— Elige primero el cliente —</option></select>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LISTA ============ -->
+  <div id="vistaLista">
+    <div id="estadoInicial" class="empty-state">
+      <i class="bi bi-clipboard2-pulse"></i>
+      <div class="fw-bold mb-1">Elige un cliente y un centro</div>
+      <div>Se mostrarán los beneficiarios que tienen evaluaciones repetidas.</div>
+    </div>
+
+    <div id="contenidoLista" class="d-none">
+      <div class="row g-3 mt-1" id="tiles"></div>
+
+      <div class="banda" id="banda"></div>
+
+      <section class="table-card mt-4">
+        <div class="table-card-head">
+          <h2>Beneficiarios del centro</h2>
+          <div class="d-flex gap-3 align-items-center flex-wrap">
+            <div class="form-check mb-0">
+              <input class="form-check-input" type="checkbox" id="chkTodos">
+              <label class="form-check-label small" for="chkTodos">Incluir beneficiarios sin repetidas</label>
+            </div>
+            <div class="input-group" style="width:280px;">
+              <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+              <input type="search" id="buscar" class="form-control" placeholder="Nombre, apellido o ID">
+            </div>
+          </div>
+        </div>
+        <div id="estadoTabla" class="empty-state d-none"></div>
+        <div class="table-scroll" id="wrapLista">
+          <table class="table align-middle">
+            <thead>
+              <tr>
+                <th>ID Digisalud</th><th>Nombres</th><th>Apellidos</th>
+                <th class="text-center">Fechas evaluadas</th><th class="text-center">Fechas con repetidas</th>
+                <th class="text-center">Mediciones sobrantes</th><th>Tipo</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="tbodyLista"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ============ DETALLE ============ -->
+  <div id="vistaDetalle" class="d-none mt-4">
+    <button type="button" class="btn-clear mb-3" id="btnVolver"><i class="bi bi-arrow-left me-1"></i>Volver a la lista</button>
+    <section class="toolbar-card" style="margin-top:0">
+      <div class="persona-cab" id="cabPersona"></div>
+    </section>
+    <div id="avisoDetalle"></div>
+    <div id="fechasRepetidas"></div>
+    <section class="table-card mt-4 d-none" id="cardSinRepetidas">
+      <div class="table-card-head"><h2>Fechas sin repetidas</h2><span class="small text-secondary" id="cntSinRepetidas"></span></div>
+      <div class="p-3 d-flex flex-wrap gap-2" id="chipsSinRepetidas"></div>
+    </section>
+    <div class="action-bar px-0" id="barraAccion">
+      <div class="text-secondary small" id="resumenAccion"></div>
+      <button type="button" class="btn-main" id="btnEliminar" disabled><i class="bi bi-trash3 me-1"></i><span id="btnEliminarTexto">Eliminar repetidas</span></button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PAIS = {{ pais|tojson }};
+const $ = id => document.getElementById(id);
+const el = (tag, clase, texto) => { const e = document.createElement(tag); if (clase) e.className = clase; if (texto !== undefined) e.textContent = texto; return e; };
+const norm = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const fechaLarga = iso => iso ? iso.split("-").reverse().join("/") : "—";
+const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+
+let lista = null;          // respuesta de /beneficiarios
+let centroActual = null;   // {id, nombre}
+let detalle = null;        // respuesta de /detalle
+let conservar = {};        // {fecha: nº de carga}
+let solicitud = 0;
+
+async function api(url, opciones) {
+  const resp = await fetch(url, { credentials: "include", ...opciones });
+  if (resp.status === 401) { window.location.href = "/login"; throw new Error("Sesión expirada"); }
+  const data = await resp.json();
+  if (!resp.ok || data.status !== "ok") throw new Error(data.mensaje || "Ocurrió un error inesperado.");
+  return data;
+}
+const post = (url, cuerpo) => api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cuerpo) });
+
+/* ---------- Filtros ---------- */
+async function cargarClientes() {
+  try {
+    const { clientes } = await api(`/api/eval_dup/clientes?pais=${PAIS}`);
+    const s = $("cliente");
+    s.innerHTML = "";
+    s.add(new Option("— Elige el cliente —", ""));
+    clientes.forEach(c => s.add(new Option(`${c.nombre} (${plural(c.centros, "centro", "centros")})`, c.organizacion_id)));
+  } catch (e) { mostrarToast(e.message, "error"); }
+}
+
+async function cargarCentros() {
+  const org = $("cliente").value;
+  const s = $("centro");
+  s.innerHTML = ""; s.disabled = true;
+  mostrarInicio();
+  if (!org) { s.add(new Option("— Elige primero el cliente —", "")); return; }
+  try {
+    const { centros } = await api(`/api/eval_dup/centros?pais=${PAIS}&organizacion_id=${org}`);
+    s.add(new Option("— Elige el centro —", ""));
+    centros.forEach(c => s.add(new Option(`${c.nombre}${c.repetidas ? ` · ${c.repetidas} repetidas` : ""}`, c.centro_id)));
+    s.disabled = false;
+    if (centros.length === 1) { s.value = centros[0].centro_id; cargarLista(); }
+  } catch (e) { mostrarToast(e.message, "error"); }
+}
+
+function mostrarInicio() {
+  lista = null; centroActual = null;
+  $("estadoInicial").classList.remove("d-none");
+  $("contenidoLista").classList.add("d-none");
+}
+
+/* ---------- Lista de beneficiarios ---------- */
+async function cargarLista() {
+  const id = $("centro").value;
+  if (!id) return mostrarInicio();
+  const mio = ++solicitud;
+  $("estadoInicial").classList.remove("d-none");
+  $("estadoInicial").innerHTML = "";
+  $("estadoInicial").append(el("i", "bi bi-hourglass-split"), el("div", "fw-bold", "Buscando evaluaciones repetidas…"));
+  $("contenidoLista").classList.add("d-none");
+  try {
+    const todos = $("chkTodos").checked;
+    const data = await api(`/api/eval_dup/beneficiarios?pais=${PAIS}&centro_id=${id}&todos=${todos}`);
+    if (mio !== solicitud) return;
+    lista = data;
+    centroActual = { id: Number(id), nombre: data.centro.nombre };
+    $("estadoInicial").classList.add("d-none");
+    $("contenidoLista").classList.remove("d-none");
+    renderResumen();
+    renderTabla();
+  } catch (e) {
+    if (mio !== solicitud) return;
+    $("estadoInicial").innerHTML = "";
+    $("estadoInicial").append(el("i", "bi bi-exclamation-triangle"), el("div", "fw-bold", "No se pudo cargar"), el("div", "", e.message));
+  }
+}
+
+function renderResumen() {
+  const r = lista.resumen;
+  const tiles = $("tiles");
+  tiles.innerHTML = "";
+  [
+    [r.beneficiarios_con_repetidas, "Beneficiarios con repetidas", false],
+    [r.filas_sobrantes, "Mediciones sobrantes en total", false],
+    [r.filas_sobrantes_identicas, "Idénticas: se limpian solas", false],
+    [r.filas_sobrantes_distintas, "Con valores distintos: requieren revisión", r.filas_sobrantes_distintas > 0],
+  ].forEach(([n, etq, alerta]) => {
+    const col = el("div", "col-6 col-lg-3");
+    const t = el("div", "tile" + (alerta ? " alerta" : ""));
+    t.append(el("div", "num", n), el("div", "lbl", etq));
+    col.append(t); tiles.append(col);
+  });
+
+  const banda = $("banda");
+  banda.innerHTML = "";
+  if (!r.filas_sobrantes_identicas) {
+    banda.className = "banda limpia";
+    banda.append(el("div", "", r.filas_sobrantes
+      ? "No hay copias idénticas para limpiar automáticamente. Revisa cada beneficiario con valores distintos."
+      : "Este centro no tiene evaluaciones repetidas."));
+    return;
+  }
+  banda.className = "banda aviso";
+  const txt = el("div");
+  txt.append(el("strong", "", "Limpieza rápida: "), `${plural(r.filas_sobrantes_identicas, "medición idéntica repetida", "mediciones idénticas repetidas")}. Se conserva la primera carga de cada una.`);
+  const btn = el("button", "btn-main"); btn.type = "button";
+  btn.append(el("i", "bi bi-magic me-1"), "Eliminar repetidas idénticas del centro");
+  btn.addEventListener("click", () => confirmarYEliminar({ modo: "exactas", persona_id: null }, `del centro "${centroActual.nombre}"`));
+  banda.append(txt, btn);
+}
+
+function renderTabla() {
+  const f = norm($("buscar").value.trim());
+  const filas = lista.beneficiarios.filter(b => !f || norm(`${b.nombres} ${b.apellidos} ${b.id_digisalud}`).includes(f));
+  const tbody = $("tbodyLista");
+  tbody.innerHTML = "";
+  const estado = $("estadoTabla");
+  if (!filas.length) {
+    estado.innerHTML = "";
+    estado.append(el("i", "bi bi-patch-check"), el("div", "fw-bold", lista.beneficiarios.length ? "Ningún beneficiario coincide" : "No hay beneficiarios con evaluaciones repetidas"),
+      el("div", "", lista.beneficiarios.length ? "" : "Marca «Incluir beneficiarios sin repetidas» para ver a todos."));
+    estado.classList.remove("d-none"); $("wrapLista").classList.add("d-none");
+    return;
+  }
+  estado.classList.add("d-none"); $("wrapLista").classList.remove("d-none");
+  const frag = document.createDocumentFragment();
+  filas.forEach(b => {
+    const tr = el("tr");
+    const tdId = el("td"); tdId.append(el("span", "id-badge", b.id_digisalud || "—"));
+    const tdTipo = el("td");
+    if (!b.sobrantes) tdTipo.append(el("span", "tag tag-gris", "Sin repetidas"));
+    else tdTipo.append(el("span", "tag " + (b.con_valores_distintos ? "tag-ambar" : "tag-azul"), b.con_valores_distintos ? "Valores distintos" : "Idénticas"));
+    const tdAcc = el("td", "text-end");
+    const btn = el("button", "btn-sm-main", b.sobrantes ? "Revisar" : "Ver"); btn.type = "button";
+    btn.addEventListener("click", () => abrirDetalle(b.persona_id));
+    tdAcc.append(btn);
+    tr.append(tdId, el("td", "fw-semibold", b.nombres), el("td", "", b.apellidos), el("td", "text-center", b.fechas),
+      el("td", "text-center", b.fechas_repetidas), el("td", "text-center fw-bold", b.sobrantes), tdTipo, tdAcc);
+    frag.append(tr);
+  });
+  tbody.append(frag);
+}
+
+/* ---------- Detalle ---------- */
+async function abrirDetalle(personaId) {
+  try {
+    detalle = await api(`/api/eval_dup/detalle?pais=${PAIS}&centro_id=${centroActual.id}&persona_id=${personaId}`);
+    conservar = {};
+    detalle.fechas.forEach(f => { if (f.repetida) conservar[f.fecha] = 1; });
+    $("vistaLista").classList.add("d-none");
+    $("vistaDetalle").classList.remove("d-none");
+    renderDetalle();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (e) { mostrarToast(e.message, "error"); }
+}
+
+// Misma regla que el servidor: se conserva la fila de la carga elegida; si el tipo no está en esa carga, la más antigua.
+function idsAEliminar() {
+  const ids = new Set();
+  detalle.fechas.filter(f => f.repetida).forEach(f => {
+    const elegida = conservar[f.fecha] || 1;
+    f.tipos.forEach(t => {
+      if (t.filas.length < 2) return;
+      const candidatas = t.filas.filter(x => x.copia === elegida);
+      const base = candidatas.length ? candidatas : t.filas;
+      const conservada = Math.min(...base.map(x => x.idunico));
+      t.filas.forEach(x => { if (x.idunico !== conservada) ids.add(x.idunico); });
+    });
+  });
+  return ids;
+}
+
+function renderDetalle() {
+  const p = detalle.persona;
+  const cab = $("cabPersona");
+  cab.innerHTML = "";
+  const izq = el("div");
+  izq.append(el("div", "nom", `${p.nombres} ${p.apellidos}`));
+  const sub = el("div", "d-flex gap-2 align-items-center flex-wrap mt-1");
+  sub.append(el("span", "id-badge", p.id_digisalud || "—"), el("span", "small text-secondary", `Nac. ${fechaLarga(p.fecha_nacimiento)}`), el("span", "small text-secondary", `· Centro: ${detalle.centro.nombre}`));
+  izq.append(sub); cab.append(izq);
+
+  const repetidas = detalle.fechas.filter(f => f.repetida);
+  const sin = detalle.fechas.filter(f => !f.repetida);
+  const aviso = $("avisoDetalle");
+  aviso.innerHTML = "";
+  if (!repetidas.length) {
+    const b = el("div", "banda limpia");
+    b.append(el("div", "", `Este beneficiario no tiene evaluaciones repetidas en este centro (${plural(detalle.fechas.length, "fecha evaluada", "fechas evaluadas")}).`));
+    aviso.append(b);
+  }
+
+  const cont = $("fechasRepetidas");
+  cont.innerHTML = "";
+  const eliminar = idsAEliminar();
+  repetidas.forEach(f => cont.append(tarjetaFecha(f, eliminar)));
+
+  $("cardSinRepetidas").classList.toggle("d-none", !sin.length);
+  $("cntSinRepetidas").textContent = plural(sin.length, "fecha", "fechas");
+  const chips = $("chipsSinRepetidas");
+  chips.innerHTML = "";
+  sin.forEach(f => chips.append(el("span", "tag tag-gris", `${fechaLarga(f.fecha)} · ${plural(f.tipos.length, "medición", "mediciones")}`)));
+
+  actualizarAccion(eliminar.size);
+}
+
+function tarjetaFecha(f, eliminar) {
+  const card = el("div", "fecha-card");
+  const cab = el("div", "cab");
+  const t = el("div", "t"); t.append(`${fechaLarga(f.fecha)} · `, el("span", "text-secondary fw-normal", plural(f.copias.length, "carga", "cargas")));
+  cab.append(t, el("span", "tag " + (f.identica ? "tag-azul" : "tag-ambar"), f.identica ? "Copias idénticas" : "Hay valores distintos: elige qué carga conservar"));
+  card.append(cab);
+
+  const wrap = el("div", "table-responsive");
+  const tabla = el("table", "table align-middle");
+  const thead = el("thead"); const trh = el("tr"); trh.append(el("th", "", "Medición"));
+  f.copias.forEach(c => {
+    const th = el("th", "th-copia" + ((conservar[f.fecha] || 1) === c.n ? " elegida" : ""));
+    const lbl = el("label");
+    const radio = el("input"); radio.type = "radio"; radio.name = `copia-${f.fecha}`; radio.className = "form-check-input";
+    radio.checked = (conservar[f.fecha] || 1) === c.n;
+    radio.addEventListener("change", () => { conservar[f.fecha] = c.n; renderDetalle(); });
+    lbl.append(radio, el("span", "", `Conservar carga ${c.n}`), el("small", "", c.creada));
+    th.append(lbl); trh.append(th);
+  });
+  thead.append(trh); tabla.append(thead);
+
+  const tbody = el("tbody");
+  f.tipos.forEach(tp => {
+    const tr = el("tr");
+    tr.append(el("td", "fw-semibold", tp.nombre));
+    const distintos = new Set(tp.filas.map(x => x.valor.trim())).size > 1;
+    f.copias.forEach(c => {
+      const filas = tp.filas.filter(x => x.copia === c.n);
+      const td = el("td", "c-valor");
+      if (!filas.length) { td.classList.add("vacio"); td.textContent = "—"; }
+      else {
+        td.textContent = filas.map(x => x.valor || "(vacío)").join(" / ");
+        if (tp.filas.length > 1) {
+          if (filas.every(x => eliminar.has(x.idunico))) td.classList.add("se-elimina");
+          else td.classList.add("se-queda");
+          if (distintos) td.classList.add("difiere");
+        }
+      }
+      tr.append(td);
+    });
+    tbody.append(tr);
+  });
+  tabla.append(tbody); wrap.append(tabla); card.append(wrap);
+  return card;
+}
+
+function actualizarAccion(n) {
+  $("resumenAccion").textContent = n
+    ? `Se eliminarán ${plural(n, "medición repetida", "mediciones repetidas")}; las tachadas en rojo. Se conserva la carga marcada en cada fecha.`
+    : "No hay nada que eliminar.";
+  $("btnEliminar").disabled = n === 0;
+  $("btnEliminarTexto").textContent = n ? `Eliminar ${plural(n, "repetida", "repetidas")}` : "Eliminar repetidas";
+  $("barraAccion").classList.toggle("d-none", !detalle.fechas.some(f => f.repetida));
+}
+
+/* ---------- Eliminación (vista previa del servidor → confirmación → ejecución) ---------- */
+async function confirmarYEliminar(base, descripcion) {
+  const cuerpo = { pais: PAIS, centro_id: centroActual.id, conservar: {}, ...base };
+  if (base.modo === "seleccion") cuerpo.conservar = conservar;
+  let plan;
+  try { plan = await post("/api/eval_dup/plan", cuerpo); } catch (e) { return mostrarToast(e.message, "error"); }
+  if (!plan.total) return mostrarToast("No hay evaluaciones repetidas para eliminar.", "info");
+  const quien = base.modo === "exactas" && !base.persona_id ? ` de ${plural(plan.beneficiarios, "beneficiario", "beneficiarios")}` : "";
+  const nota = base.modo === "exactas" ? " Se conserva la primera carga de cada medición." : " Se conserva la carga elegida en cada fecha.";
+  confirmarAccion(
+    `Se eliminarán ${plural(plan.total, "medición repetida", "mediciones repetidas")}${quien} ${descripcion}.${nota} Esta acción no se puede deshacer. ¿Continuar?`,
+    async () => {
+      try {
+        const r = await post("/api/eval_dup/eliminar", { ...cuerpo, esperado: plan.total });
+        mostrarExito(r);
+      } catch (e) { mostrarToast(e.message, "error"); }
+    }
+  );
+}
+
+function mostrarExito(r) {
+  const caja = $("modalMessage");
+  caja.innerHTML = "";
+  caja.append(el("p", "mb-0", `Se eliminaron ${plural(r.eliminadas, "medición repetida", "mediciones repetidas")}${r.beneficiarios > 1 ? ` de ${r.beneficiarios} beneficiarios` : ""}.`));
+  document.querySelector("#successModal .btn-save").removeAttribute("onclick");   // el modal base recarga la página
+  const modalEl = $("successModal");
+  modalEl.addEventListener("hidden.bs.modal", despuesDeEliminar, { once: true });
+  new bootstrap.Modal(modalEl).show();
+}
+
+async function despuesDeEliminar() {
+  const persona = detalle && !$("vistaDetalle").classList.contains("d-none") ? detalle.persona.persona_id : null;
+  await cargarLista();
+  if (persona) { try { await abrirDetalle(persona); return; } catch (e) { /* si ya no tiene evaluaciones, queda la lista */ } }
+  $("vistaDetalle").classList.add("d-none");
+  $("vistaLista").classList.remove("d-none");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  $("pais").addEventListener("change", function () { window.location.search = new URLSearchParams({ pais: this.value }).toString(); });
+  $("cliente").addEventListener("change", cargarCentros);
+  $("centro").addEventListener("change", cargarLista);
+  $("chkTodos").addEventListener("change", cargarLista);
+  $("buscar").addEventListener("input", () => { if (lista) renderTabla(); });
+  $("btnVolver").addEventListener("click", () => { $("vistaDetalle").classList.add("d-none"); $("vistaLista").classList.remove("d-none"); detalle = null; cargarLista(); });
+  $("btnEliminar").addEventListener("click", () =>
+    confirmarYEliminar({ modo: "seleccion", persona_id: Number(detalle.persona.persona_id) }, `de ${detalle.persona.nombres} ${detalle.persona.apellidos}`));
+  cargarClientes();
+});
+</script>
+{% endblock %}
