@@ -1,0 +1,654 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .table-card{overflow:hidden}
+  .table-card-head{padding:18px 20px;border-bottom:1px solid var(--ds-border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .table-card-head h2{font-size:1.05rem;font-weight:800;margin:0}
+  .table-scroll{max-height:460px;overflow:auto}
+  table{margin:0 !important}
+  thead th{position:sticky;top:0;z-index:1;background:#f8fafc !important;color:#475467 !important;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ds-border) !important;padding:12px 14px !important;white-space:nowrap}
+  tbody td{padding:10px 14px !important;vertical-align:middle;border-color:#eef0f3 !important}
+
+  /* Stepper */
+  .stepper{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}
+  .step{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;background:#fff;border:1px solid var(--ds-border);color:var(--ds-muted);font-weight:700;font-size:.9rem}
+  .step .n{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#f2f4f7;font-size:.82rem}
+  .step.activo{border-color:var(--ds-coral);color:var(--ds-ink);box-shadow:0 4px 14px rgba(255,92,87,.12)}
+  .step.activo .n{background:var(--ds-coral);color:#fff}
+  .step.hecho{color:var(--ds-ink);cursor:pointer}
+  .step.hecho .n{background:#12b76a;color:#fff}
+  .step.hecho:hover{background:#f9fafb}
+
+  .id-badge{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8rem;font-weight:700;background:#f2f4f7;color:#344054;padding:4px 8px;border-radius:7px;white-space:nowrap}
+  .tag{display:inline-block;padding:4px 9px;border-radius:999px;font-size:.74rem;font-weight:800;white-space:nowrap}
+  .tag-posible{background:#fff3f2;color:#d92d20}
+  .tag-azul{background:#eef4ff;color:#3559c7}
+  .tag-ambar{background:#fffaeb;color:#b54708}
+  .tag-gris{background:#f2f4f7;color:#475467}
+  .tag-verde{background:#ecfdf3;color:#027a48}
+
+  .form-check-input{width:1.15rem;height:1.15rem;cursor:pointer}
+  .form-check-input:checked{background-color:var(--ds-coral);border-color:var(--ds-coral)}
+  #tbodyResultados tr{cursor:pointer}
+  #tbodyResultados tr:hover{background:#fffaf9}
+  #tbodyResultados tr.marcada{background:#fff3f2}
+
+  .action-bar{padding:16px 20px;border-top:1px solid var(--ds-border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .btn-main{min-height:44px;border-radius:10px;border:0;background:var(--ds-coral);color:#fff;font-weight:700;padding:0 20px}
+  .btn-main:disabled{background:#f3b1ae;cursor:not-allowed}
+  .btn-main:not(:disabled):hover{filter:brightness(.97);color:#fff}
+  .input-group-text{border-color:#d0d5dd;border-radius:10px 0 0 10px;color:var(--ds-muted)}
+
+  /* Tarjetas de comparación */
+  .persona-card{background:#fff;border:2px solid var(--ds-border);border-radius:16px;overflow:hidden;height:100%;display:flex;flex-direction:column;transition:.15s}
+  .persona-card .cab{padding:16px 18px;border-bottom:1px solid var(--ds-border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .persona-card .cuerpo{padding:16px 18px;flex:1}
+  .persona-card .pie{padding:14px 18px;border-top:1px solid var(--ds-border);background:#fcfcfd}
+  .persona-card.queda{border-color:#12b76a;box-shadow:0 8px 24px rgba(18,183,106,.14)}
+  .persona-card.queda .cab{background:#ecfdf3}
+  .persona-card.fuera{border-color:#fda29b;opacity:.92}
+  .persona-card.fuera .cab{background:#fef3f2}
+  .campo{display:flex;justify-content:space-between;gap:12px;padding:7px 8px;border-radius:8px;font-size:.9rem}
+  .campo span:first-child{color:var(--ds-muted)}
+  .campo span:last-child{font-weight:700;text-align:right;word-break:break-word}
+  .campo.difiere{background:#fffaeb}
+  .campo.difiere span:last-child{color:#b54708}
+  .part-lista{max-height:190px;overflow:auto;border:1px solid var(--ds-border);border-radius:10px}
+  .part-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;font-size:.86rem;border-bottom:1px solid #eef0f3}
+  .part-item:last-child{border-bottom:0}
+  .part-item .nom{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  .aviso{border-radius:12px;padding:12px 16px;font-size:.9rem;display:flex;gap:10px;align-items:flex-start;margin-top:14px}
+  .aviso.alto{background:#fffaeb;border:1px solid #fedf89;color:#7a2e0e}
+  .aviso.ok{background:#ecfdf3;border:1px solid #abefc6;color:#05603a}
+  .aviso ul{margin:4px 0 0;padding-left:18px}
+
+  /* Resumen del plan */
+  .tile{background:#fff;border:1px solid var(--ds-border);border-radius:14px;padding:14px 16px;height:100%}
+  .tile .num{font-size:1.7rem;font-weight:800;line-height:1.1}
+  .tile .lbl{font-size:.8rem;color:var(--ds-muted)}
+  .tile.alerta{background:#fffaeb;border-color:#fedf89}
+  .tile.alerta .num{color:#b54708}
+  .flujo{display:flex;align-items:stretch;gap:14px;flex-wrap:wrap}
+  .flujo .caja{flex:1;min-width:240px;border-radius:14px;padding:14px 16px;border:2px solid}
+  .flujo .caja.q{background:#ecfdf3;border-color:#12b76a}
+  .flujo .caja.f{background:#fef3f2;border-color:#fda29b}
+  .flujo .flecha{display:grid;place-items:center;color:var(--ds-muted);font-size:1.4rem}
+</style>
+
+<div class="container-fluid px-0" style="max-width:1280px;">
+
+  <div>
+    <div class="eyebrow">Beneficiarios</div>
+    <h1 class="page-title">Unificar beneficiarios duplicados</h1>
+    <p class="page-subtitle">Cuando una misma persona quedó registrada dos veces, elige cuál registro se conserva y pasa a él la información del otro.</p>
+  </div>
+
+  <div class="stepper" id="stepper">
+    <div class="step activo" data-paso="1"><span class="n">1</span> Buscar</div>
+    <div class="step" data-paso="2"><span class="n">2</span> Elegir cuál se queda</div>
+    <div class="step" data-paso="3"><span class="n">3</span> Revisar y unificar</div>
+  </div>
+
+  <!-- ============ PASO 1: BUSCAR ============ -->
+  <div id="paso1">
+    <section class="toolbar-card">
+      <form id="formBuscar" class="row g-3 align-items-end" autocomplete="off">
+        <div class="col-lg-2">
+          <label class="form-label" for="pais">País</label>
+          <select id="pais" class="form-select">
+            <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+            <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+            <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
+          </select>
+        </div>
+        <div class="col-lg-3">
+          <label class="form-label" for="nombre">Nombre contiene</label>
+          <input type="text" id="nombre" class="form-control" placeholder="Ej.: ABY">
+        </div>
+        <div class="col-lg-3">
+          <label class="form-label" for="apellido">Apellido contiene</label>
+          <input type="text" id="apellido" class="form-control" placeholder="Ej.: LARA">
+        </div>
+        <div class="col-lg-2">
+          <label class="form-label" for="documento">ID Digisalud / cédula</label>
+          <input type="text" id="documento" class="form-control" placeholder="Opcional">
+        </div>
+        <div class="col-lg-2 d-flex gap-2">
+          <button type="submit" class="btn-filter flex-grow-1" id="btnBuscar"><i class="bi bi-search me-1"></i>Buscar</button>
+          <button type="button" class="btn-clear" id="btnLimpiar" title="Limpiar"><i class="bi bi-x-lg"></i></button>
+        </div>
+      </form>
+      <div class="form-text mt-2">Sirve cualquier parte del texto. Si escribes varias palabras, deben aparecer todas. Mientras menos escribas, más resultados verás.</div>
+    </section>
+
+    <section class="table-card mt-4 d-none" id="cardResultados">
+      <div class="table-card-head">
+        <h2>Resultados</h2>
+        <div class="results-text text-secondary small" id="resumenResultados"></div>
+      </div>
+      <div id="estadoResultados" class="empty-state d-none"></div>
+      <div class="table-scroll" id="wrapResultados">
+        <table class="table align-middle">
+          <thead>
+            <tr>
+              <th style="width:44px;"></th>
+              <th>ID Digisalud</th>
+              <th>Nombres</th>
+              <th>Apellidos</th>
+              <th style="width:60px;">Sexo</th>
+              <th style="width:120px;">Nacimiento</th>
+              <th class="text-center">Jornadas</th>
+              <th class="text-center">Centros</th>
+              <th class="text-center">Pesquisas</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbodyResultados"></tbody>
+        </table>
+      </div>
+      <div class="action-bar">
+        <div class="results-text text-secondary small" id="ayudaSeleccion">Marca los dos registros que crees que son la misma persona.</div>
+        <button type="button" class="btn-main" id="btnComparar" disabled><i class="bi bi-intersect me-1"></i>Comparar seleccionados</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ PASO 2: ELEGIR ============ -->
+  <div id="paso2" class="d-none mt-4">
+    <div id="avisosComparacion"></div>
+    <div class="row g-4 mt-0" id="tarjetas"></div>
+    <div class="action-bar px-0">
+      <button type="button" class="btn-clear" id="btnVolver2"><i class="bi bi-arrow-left me-1"></i>Volver a la búsqueda</button>
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <span class="results-text text-secondary small" id="ayudaElegir">Elige con el botón verde cuál registro se conserva.</span>
+        <button type="button" class="btn-main" id="btnContinuar" disabled>Continuar<i class="bi bi-arrow-right ms-1"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PASO 3: REVISAR ============ -->
+  <div id="paso3" class="d-none mt-4">
+    <div class="flujo" id="flujo"></div>
+    <div id="avisosPlan"></div>
+
+    <div class="row g-3 mt-1" id="tiles"></div>
+
+    <section class="table-card mt-4">
+      <div class="table-card-head">
+        <h2>Qué pasará en cada jornada y centro</h2>
+        <div class="results-text text-secondary small" id="resumenFamiliares"></div>
+      </div>
+      <div class="table-scroll">
+        <table class="table align-middle">
+          <thead><tr><th style="width:34%;">Jornada / centro</th><th style="width:170px;">Acción</th><th>Detalle</th></tr></thead>
+          <tbody id="tbodyPlan"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="form-check mt-3 d-none" id="bloqueConfirmaAvisos">
+      <input class="form-check-input" type="checkbox" id="chkAvisos">
+      <label class="form-check-label fw-semibold" for="chkAvisos">Entiendo las diferencias señaladas arriba y quiero unificar estos registros de todos modos.</label>
+    </div>
+
+    <div class="action-bar px-0">
+      <button type="button" class="btn-clear" id="btnVolver3"><i class="bi bi-arrow-left me-1"></i>Volver</button>
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <span class="results-text small" style="color:#b42318;"><i class="bi bi-exclamation-triangle me-1"></i>Esta acción no se puede deshacer.</span>
+        <button type="button" class="btn-main" id="btnUnificar" disabled><i class="bi bi-intersect me-1"></i>Unificar beneficiarios</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PAIS = {{ pais|tojson }};
+const $ = id => document.getElementById(id);
+
+function el(tag, clase, texto) {
+  const e = document.createElement(tag);
+  if (clase) e.className = clase;
+  if (texto !== undefined) e.textContent = texto;
+  return e;
+}
+const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+const normalizar = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().trim();
+const fechaLarga = iso => iso ? iso.split("-").reverse().join("/") : "—";
+
+// Si se llega desde "Posibles duplicados" (?a=ID&b=ID) se abre directo la comparación y se regresa a esa lista.
+const URL_LISTA = `/beneficiarios/v2/posibles-duplicados?pais=${encodeURIComponent(PAIS)}`;
+const PARAMS_URL = new URLSearchParams(window.location.search);
+const DESDE_LISTA = /^\d+$/.test(PARAMS_URL.get("a") || "") && /^\d+$/.test(PARAMS_URL.get("b") || "");
+
+let resultados = [];
+let seleccion = [];        // máx. 2 persona_id (texto)
+let comparacion = null;    // respuesta de /comparar
+let quedaId = null;
+let plan = null;
+
+async function api(url, opciones) {
+  const resp = await fetch(url, { credentials: "include", ...opciones });
+  if (resp.status === 401) { window.location.href = "/login"; throw new Error("Sesión expirada"); }
+  const data = await resp.json();
+  if (!resp.ok || data.status !== "ok") throw new Error(data.mensaje || "Ocurrió un error inesperado.");
+  return data;
+}
+
+/* ---------- Navegación entre pasos ---------- */
+let pasoMaximo = 1;
+function irPaso(n) {
+  pasoMaximo = Math.max(pasoMaximo, n);
+  [1, 2, 3].forEach(i => $(`paso${i}`).classList.toggle("d-none", i !== n));
+  document.querySelectorAll(".step").forEach(s => {
+    const i = Number(s.dataset.paso);
+    s.classList.toggle("activo", i === n);
+    s.classList.toggle("hecho", i < n);
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+/* ---------- Paso 1: búsqueda ---------- */
+function estadoResultados(icono, titulo, detalle) {
+  const e = $("estadoResultados");
+  e.innerHTML = "";
+  const i = el("i", `bi ${icono}`);
+  e.append(i, el("div", "fw-bold mb-1", titulo), el("div", "", detalle || ""));
+  e.classList.remove("d-none");
+  $("wrapResultados").classList.add("d-none");
+}
+
+async function buscar(ev) {
+  if (ev) ev.preventDefault();
+  const params = new URLSearchParams({
+    pais: PAIS, nombre: $("nombre").value.trim(), apellido: $("apellido").value.trim(), documento: $("documento").value.trim(),
+  });
+  $("cardResultados").classList.remove("d-none");
+  estadoResultados("bi-hourglass-split", "Buscando…");
+  $("btnBuscar").disabled = true;
+  seleccion = []; actualizarSeleccion();
+  try {
+    const data = await api(`/api/duplicados/buscar?${params}`);
+    resultados = data.resultados;
+    $("resumenResultados").textContent = data.hay_mas
+      ? `Mostrando los primeros ${resultados.length}. Afina la búsqueda para ver menos.`
+      : plural(resultados.length, "resultado", "resultados");
+    if (!resultados.length) return estadoResultados("bi-person-x", "No se encontró a nadie", "Prueba con menos letras o con otro campo.");
+    $("estadoResultados").classList.add("d-none");
+    $("wrapResultados").classList.remove("d-none");
+    renderResultados();
+  } catch (e) {
+    $("resumenResultados").textContent = "";
+    estadoResultados("bi-exclamation-triangle", "No se pudo buscar", e.message);
+  } finally {
+    $("btnBuscar").disabled = false;
+  }
+}
+
+function renderResultados() {
+  // Misma persona probable: mismo apellido, sexo y fecha de nacimiento.
+  const clave = r => `${normalizar(r.apellidos)}|${r.sexo}|${r.fecha_nacimiento}`;
+  const conteo = {};
+  resultados.forEach(r => { conteo[clave(r)] = (conteo[clave(r)] || 0) + 1; });
+
+  const tbody = $("tbodyResultados");
+  tbody.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  resultados.forEach(r => {
+    const tr = el("tr");
+    tr.dataset.id = r.persona_id;
+    const marcado = seleccion.includes(r.persona_id);
+    if (marcado) tr.classList.add("marcada");
+
+    const chk = el("input", "form-check-input");
+    chk.type = "checkbox"; chk.checked = marcado;
+    const tdChk = el("td"); tdChk.append(chk);
+    const tdId = el("td"); tdId.append(el("span", "id-badge", r.id_digisalud || "—"));
+    const tdPos = el("td");
+    if (conteo[clave(r)] > 1) tdPos.append(el("span", "tag tag-posible", "Posible duplicado"));
+
+    tr.append(
+      tdChk, tdId, el("td", "fw-semibold", r.nombres), el("td", "", r.apellidos), el("td", "", r.sexo),
+      el("td", "", fechaLarga(r.fecha_nacimiento)),
+      el("td", "text-center", r.jornadas), el("td", "text-center", r.centros), el("td", "text-center", r.pesquisas),
+      tdPos
+    );
+    frag.append(tr);
+  });
+  tbody.append(frag);
+  actualizarSeleccion();
+}
+
+function alternarSeleccion(id) {
+  if (seleccion.includes(id)) seleccion = seleccion.filter(x => x !== id);
+  else { seleccion.push(id); if (seleccion.length > 2) seleccion.shift(); }
+  actualizarSeleccion();
+}
+
+function actualizarSeleccion() {
+  document.querySelectorAll("#tbodyResultados tr").forEach(tr => {
+    const on = seleccion.includes(tr.dataset.id);
+    tr.classList.toggle("marcada", on);
+    tr.querySelector("input").checked = on;
+  });
+  $("btnComparar").disabled = seleccion.length !== 2;
+  $("ayudaSeleccion").textContent = seleccion.length === 2
+    ? "Listo: compara los dos registros."
+    : `Marca los dos registros que crees que son la misma persona (${seleccion.length}/2).`;
+}
+
+/* ---------- Paso 2: comparar y elegir ---------- */
+async function comparar() {
+  $("btnComparar").disabled = true;
+  try {
+    const params = new URLSearchParams({ pais: PAIS, id_a: seleccion[0], id_b: seleccion[1] });
+    comparacion = await api(`/api/duplicados/comparar?${params}`);
+    quedaId = null; plan = null;
+    renderComparacion();
+    irPaso(2);
+  } catch (e) {
+    mostrarToast(e.message, "error");
+  } finally {
+    actualizarSeleccion();
+  }
+}
+
+function listaAvisos(avisos, contenedor) {
+  contenedor.innerHTML = "";
+  if (!avisos.length) {
+    const ok = el("div", "aviso ok");
+    ok.append(el("i", "bi bi-check-circle-fill"), el("div", "", "Sexo, fecha de nacimiento y apellidos coinciden: todo indica que es la misma persona."));
+    contenedor.append(ok);
+    return;
+  }
+  const caja = el("div", "aviso alto");
+  caja.append(el("i", "bi bi-exclamation-triangle-fill"));
+  const texto = el("div");
+  texto.append(el("strong", "", "Revisa antes de continuar: podrían ser personas distintas."));
+  const ul = el("ul");
+  avisos.forEach(a => ul.append(el("li", "", a.mensaje)));
+  texto.append(ul);
+  caja.append(texto);
+  contenedor.append(caja);
+}
+
+function renderComparacion() {
+  listaAvisos(comparacion.advertencias, $("avisosComparacion"));
+  const [a, b] = comparacion.personas;
+  const campos = [
+    ["Nombres", "nombres"], ["Apellidos", "apellidos"], ["Sexo", "sexo"],
+    ["Nacimiento", "fecha_nacimiento"], ["Cédula", "cedula"], ["Cédula escolar", "cedula_escolar"],
+  ];
+  const difiere = k => normalizar(a[k]) !== normalizar(b[k]);
+
+  const cont = $("tarjetas");
+  cont.innerHTML = "";
+  comparacion.personas.forEach((p, idx) => {
+    const col = el("div", "col-lg-6");
+    const card = el("div", "persona-card");
+    card.dataset.id = p.persona_id;
+
+    const cab = el("div", "cab");
+    const izq = el("div");
+    izq.append(el("div", "small text-secondary fw-bold", `REGISTRO ${idx === 0 ? "A" : "B"}`), el("span", "id-badge", p.id_digisalud || "—"));
+    const estado = el("span", "tag");
+    estado.dataset.rol = "estado";
+    cab.append(izq, estado);
+
+    const cuerpo = el("div", "cuerpo");
+    campos.forEach(([etq, k]) => {
+      const f = el("div", "campo" + (difiere(k) ? " difiere" : ""));
+      f.append(el("span", "", etq), el("span", "", k === "fecha_nacimiento" ? fechaLarga(p[k]) : (p[k] || "—")));
+      cuerpo.append(f);
+    });
+
+    cuerpo.append(el("div", "small fw-bold text-secondary mt-3 mb-2", "DÓNDE PARTICIPA"));
+    const lista = el("div", "part-lista");
+    const items = [
+      ...p.jornadas.map(x => ({ tipo: "Jornada", ...x })),
+      ...p.centros.map(x => ({ tipo: "Centro", ...x })),
+    ];
+    if (!items.length) lista.append(el("div", "part-item text-secondary", "Sin jornadas ni centros"));
+    items.forEach(x => {
+      const fila = el("div", "part-item");
+      const nom = el("span", "nom", `${x.tipo} ${x.id} · ${x.nombre}`);
+      nom.title = nom.textContent;
+      const ev = x.pesquisas + x.evaluaciones_campo;
+      fila.append(nom, el("span", "tag " + (ev ? "tag-azul" : "tag-gris"), ev ? plural(ev, "evaluación", "evaluaciones") : "sin evaluar"));
+      lista.append(fila);
+    });
+    cuerpo.append(lista);
+    if (p.familiares) cuerpo.append(el("div", "small text-secondary mt-2", `${plural(p.familiares, "relación familiar registrada", "relaciones familiares registradas")}.`));
+
+    const pie = el("div", "pie");
+    const btn = el("button", "btn-main w-100");
+    btn.type = "button";
+    btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i>';
+    btn.append("Conservar este registro");
+    btn.addEventListener("click", () => elegir(p.persona_id));
+    pie.append(btn);
+
+    card.append(cab, cuerpo, pie);
+    col.append(card);
+    cont.append(col);
+  });
+  pintarElegido();
+}
+
+function pintarElegido() {
+  document.querySelectorAll(".persona-card").forEach(card => {
+    const esQueda = quedaId === card.dataset.id;
+    const esFuera = quedaId && !esQueda;
+    card.classList.toggle("queda", esQueda);
+    card.classList.toggle("fuera", !!esFuera);
+    const tag = card.querySelector('[data-rol="estado"]');
+    tag.className = "tag " + (esQueda ? "tag-verde" : esFuera ? "tag-posible" : "d-none");
+    tag.textContent = esQueda ? "SE QUEDA" : "SE ELIMINA";
+    const btn = card.querySelector("button");
+    btn.disabled = esQueda;
+    btn.lastChild.textContent = esQueda ? "Este se conserva" : "Conservar este registro";
+  });
+  $("btnContinuar").disabled = !quedaId;
+  $("ayudaElegir").textContent = quedaId
+    ? "El otro registro se eliminará y su información pasará al que conservas."
+    : "Elige con el botón verde cuál registro se conserva.";
+}
+
+function elegir(id) { quedaId = id; plan = null; pintarElegido(); }
+
+/* ---------- Paso 3: vista previa y confirmación ---------- */
+const ACCIONES = {
+  conservar_queda:       { texto: "Se conserva una",      clase: "tag-ambar", icono: "bi-exclamation-triangle" },
+  trasladar:             { texto: "Trasladar evaluaciones", clase: "tag-azul", icono: "bi-arrow-left-right" },
+  inscribir_y_trasladar: { texto: "Inscribir y trasladar", clase: "tag-azul", icono: "bi-person-plus" },
+  inscribir:             { texto: "Inscribir",             clase: "tag-azul", icono: "bi-person-plus" },
+  quitar_inscripcion:    { texto: "Quitar repetido",       clase: "tag-gris", icono: "bi-dash-circle" },
+};
+
+async function verPlan() {
+  const fuera = comparacion.personas.find(p => p.persona_id !== quedaId).persona_id;
+  $("btnContinuar").disabled = true;
+  try {
+    const params = new URLSearchParams({ pais: PAIS, queda_id: quedaId, fuera_id: fuera });
+    plan = (await api(`/api/duplicados/plan?${params}`)).plan;
+    renderPlan();
+    irPaso(3);
+  } catch (e) {
+    mostrarToast(e.message, "error");
+  } finally {
+    $("btnContinuar").disabled = !quedaId;
+  }
+}
+
+function cajaPersona(clase, titulo, p) {
+  const c = el("div", `caja ${clase}`);
+  c.append(el("div", "small fw-bold mb-1", titulo));
+  c.append(el("div", "fw-bold", `${p.nombres} ${p.apellidos}`));
+  const l = el("div", "d-flex gap-2 align-items-center flex-wrap mt-1");
+  l.append(el("span", "id-badge", p.id_digisalud || "—"), el("span", "small text-secondary", `${fechaLarga(p.fecha_nacimiento)} · ${p.sexo || "—"}`));
+  c.append(l);
+  return c;
+}
+
+function renderPlan() {
+  const f = $("flujo");
+  f.innerHTML = "";
+  const flecha = el("div", "flecha"); flecha.append(el("i", "bi bi-arrow-left-circle-fill"));
+  f.append(cajaPersona("q", "SE QUEDA", plan.queda), flecha, cajaPersona("f", "SE ELIMINA (su información pasa al otro)", plan.fuera));
+
+  const altos = plan.advertencias.filter(a => a.nivel === "alto");
+  if (altos.length) listaAvisos(altos, $("avisosPlan")); else $("avisosPlan").innerHTML = "";
+  $("bloqueConfirmaAvisos").classList.toggle("d-none", !altos.length);
+  $("chkAvisos").checked = false;
+
+  const r = plan.resumen;
+  const tiles = $("tiles");
+  tiles.innerHTML = "";
+  [
+    [r.inscripciones_nuevas, "Inscripciones nuevas para el que se queda", false],
+    [r.evaluaciones_trasladadas, "Evaluaciones que se trasladan", false],
+    [r.evaluaciones_descartadas, "Evaluaciones descartadas (ya existía una)", r.evaluaciones_descartadas > 0],
+    [r.inscripciones_retiradas, "Inscripciones del duplicado que se retiran", false],
+  ].forEach(([n, etq, alerta]) => {
+    const col = el("div", "col-6 col-lg-3");
+    const t = el("div", "tile" + (alerta ? " alerta" : ""));
+    t.append(el("div", "num", n), el("div", "lbl", etq));
+    col.append(t);
+    tiles.append(col);
+  });
+
+  const tbody = $("tbodyPlan");
+  tbody.innerHTML = "";
+  const filas = [
+    ...plan.jornadas.map(x => ({ tipo: "Jornada", icono: "bi-calendar-event", ...x })),
+    ...plan.centros.map(x => ({ tipo: "Centro", icono: "bi-building", ...x })),
+  ];
+  if (!filas.length) {
+    const tr = el("tr"); const td = el("td", "text-center text-secondary py-4", "El duplicado no estaba inscrito en ninguna jornada ni centro.");
+    td.colSpan = 3; tr.append(td); tbody.append(tr);
+  }
+  filas.forEach(x => {
+    const tr = el("tr");
+    const tdNom = el("td");
+    tdNom.append(el("i", `bi ${x.icono} me-2 text-secondary`), el("span", "fw-semibold", `${x.tipo} ${x.id}`), el("div", "small text-secondary", x.nombre));
+    const a = ACCIONES[x.accion];
+    const tdAcc = el("td"); const tag = el("span", `tag ${a.clase}`); tag.append(el("i", `bi ${a.icono} me-1`)); tag.append(a.texto); tdAcc.append(tag);
+    tr.append(tdNom, tdAcc, el("td", "", x.descripcion));
+    tbody.append(tr);
+  });
+
+  const fam = plan.familiares;
+  const partes = [];
+  if (fam.reasignar) partes.push(`${plural(fam.reasignar, "relación familiar pasa", "relaciones familiares pasan")} al que se queda`);
+  if (fam.eliminar_entre_ambos) partes.push(`${plural(fam.eliminar_entre_ambos, "relación entre ambos se elimina", "relaciones entre ambos se eliminan")}`);
+  $("resumenFamiliares").textContent = partes.join(" · ");
+  actualizarBotonUnificar();
+}
+
+function actualizarBotonUnificar() {
+  const exige = plan && plan.advertencias.some(a => a.nivel === "alto");
+  $("btnUnificar").disabled = !plan || (exige && !$("chkAvisos").checked);
+}
+
+async function unificar() {
+  const btn = $("btnUnificar");
+  btn.disabled = true;
+  const original = btn.innerHTML;
+  btn.textContent = "Unificando…";
+  try {
+    const data = await api("/api/duplicados/unificar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pais: PAIS, queda_id: Number(plan.queda.persona_id), fuera_id: Number(plan.fuera.persona_id),
+        confirmar_advertencias: $("chkAvisos").checked,
+      }),
+    });
+    mostrarExito(data);
+  } catch (e) {
+    mostrarToast(e.message, "error");
+    btn.innerHTML = original;
+    actualizarBotonUnificar();
+  }
+}
+
+function mostrarExito(data) {
+  const c = data.contadores;
+  const caja = $("modalMessage");
+  caja.innerHTML = "";
+  const p = el("p", "mb-2");
+  p.append("Quedó un solo registro: ", el("strong", "", `${data.queda.nombres} ${data.queda.apellidos}`), ` (${data.queda.id_digisalud}).`);
+  const ul = el("ul", "mb-0");
+  [
+    `${plural(c.inscripciones_nuevas, "inscripción nueva", "inscripciones nuevas")}`,
+    `${plural(c.evaluaciones_trasladadas, "evaluación trasladada", "evaluaciones trasladadas")}`,
+    `${plural(c.evaluaciones_descartadas, "evaluación descartada", "evaluaciones descartadas")} por ya existir otra`,
+    `${plural(c.datos_asociados_trasladados, "dato asociado trasladado", "datos asociados trasladados")} (autorizaciones, escolaridad…)`,
+    `${plural(c.familiares_reasignados, "relación familiar reasignada", "relaciones familiares reasignadas")}`,
+    `${plural(c.inscripciones_retiradas, "inscripción duplicada retirada", "inscripciones duplicadas retiradas")}`,
+  ].forEach(t => ul.append(el("li", "", t)));
+  caja.append(p, ul);
+
+  const aceptar = document.querySelector("#successModal .btn-save");
+  aceptar.removeAttribute("onclick");   // el modal base recarga la página; aquí se vuelve al paso 1
+  const modalEl = $("successModal");
+  modalEl.addEventListener("hidden.bs.modal", reiniciar, { once: true });
+  new bootstrap.Modal(modalEl).show();
+}
+
+function reiniciar() {
+  if (DESDE_LISTA) { window.location.href = URL_LISTA; return; }
+  comparacion = null; plan = null; quedaId = null; seleccion = [];
+  irPaso(1);
+  buscar();   // refresca la lista: el duplicado ya no aparece
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  $("pais").addEventListener("change", function () {
+    window.location.search = new URLSearchParams({ pais: this.value }).toString();
+  });
+  $("formBuscar").addEventListener("submit", buscar);
+  $("btnLimpiar").addEventListener("click", () => {
+    ["nombre", "apellido", "documento"].forEach(i => { $(i).value = ""; });
+    resultados = []; seleccion = [];
+    $("cardResultados").classList.add("d-none");
+    $("nombre").focus();
+  });
+
+  $("tbodyResultados").addEventListener("click", ev => {
+    const tr = ev.target.closest("tr");
+    if (tr) alternarSeleccion(tr.dataset.id);
+  });
+  $("btnComparar").addEventListener("click", comparar);
+  $("btnVolver2").addEventListener("click", () => {
+    if (DESDE_LISTA) window.location.href = URL_LISTA; else irPaso(1);
+  });
+  $("btnContinuar").addEventListener("click", verPlan);
+  $("btnVolver3").addEventListener("click", () => irPaso(2));
+  $("chkAvisos").addEventListener("change", actualizarBotonUnificar);
+
+  $("btnUnificar").addEventListener("click", () => {
+    confirmarAccion(
+      `Se unificará a "${plan.fuera.nombres} ${plan.fuera.apellidos}" (${plan.fuera.id_digisalud}) dentro de ` +
+      `"${plan.queda.nombres} ${plan.queda.apellidos}" (${plan.queda.id_digisalud}) y el primero se eliminará definitivamente. ` +
+      `Esta acción no se puede deshacer. ¿Continuar?`,
+      unificar
+    );
+  });
+
+  // Los pasos ya completados se pueden volver a visitar desde la barra superior.
+  document.querySelectorAll(".step").forEach(s => s.addEventListener("click", () => {
+    const n = Number(s.dataset.paso);
+    if (s.classList.contains("hecho")) irPaso(n);
+  }));
+
+  if (DESDE_LISTA) {
+    $("btnVolver2").lastChild.textContent = "Volver a la lista";
+    seleccion = [PARAMS_URL.get("a"), PARAMS_URL.get("b")];
+    comparar();
+  } else {
+    $("nombre").focus();
+  }
+});
+</script>
+{% endblock %}

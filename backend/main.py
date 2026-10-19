@@ -2171,3 +2171,170 @@ def api_copiar_beneficiarios_jornada_centro(request: Request, datos: CopiaJornad
         return _error_json(500, "No se pudieron copiar los beneficiarios. No se guardó ningún cambio.")
     finally:
         conn.close()
+
+
+# ---------------------------------------------------
+# UNIFICAR BENEFICIARIOS DUPLICADOS
+# Reemplaza el proceso manual con los procedimientos a001..a010: el usuario busca,
+# compara, elige cuál registro se queda y revisa una vista previa antes de unificar.
+# La lógica vive en backend/services/fusion_beneficiarios.py.
+# ---------------------------------------------------
+from backend.services import fusion_beneficiarios as fusion
+
+
+@app.get("/beneficiarios/v2/duplicados", response_class=HTMLResponse)
+def unificar_duplicados(request: Request, pais: str = "vzla"):
+    usuario = _usuario_autenticado(request)
+    if not usuario:
+        return RedirectResponse(url="/login", status_code=302)
+    if pais not in PAISES_VALIDOS:
+        pais = "vzla"
+    return templates.TemplateResponse(request, "beneficiarios/duplicados.html", {
+        "request": request,
+        "usuario": usuario,
+        "pais": pais,
+    })
+
+
+@app.get("/api/duplicados/buscar")
+def api_duplicados_buscar(request: Request, pais: str, nombre: str = "", apellido: str = "", documento: str = ""):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    conn = get_connection(pais)
+    try:
+        datos = fusion.buscar_personas(conn.cursor(), nombre, apellido, documento)
+        return {"status": "ok", **datos}
+    except fusion.FusionError as e:
+        return _error_json(400, str(e))
+    except Exception:
+        logger.exception("Error buscando duplicados")
+        return _error_json(500, "No se pudo realizar la búsqueda.")
+    finally:
+        conn.close()
+
+
+@app.get("/api/duplicados/comparar")
+def api_duplicados_comparar(request: Request, pais: str, id_a: int, id_b: int):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    conn = get_connection(pais)
+    try:
+        return {"status": "ok", **fusion.comparar(conn.cursor(), id_a, id_b)}
+    except fusion.FusionError as e:
+        return _error_json(400, str(e))
+    except Exception:
+        logger.exception("Error comparando beneficiarios %s y %s", id_a, id_b)
+        return _error_json(500, "No se pudo cargar la comparación.")
+    finally:
+        conn.close()
+
+
+@app.get("/api/duplicados/plan")
+def api_duplicados_plan(request: Request, pais: str, queda_id: int, fuera_id: int):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    conn = get_connection(pais)
+    try:
+        return {"status": "ok", "plan": fusion.construir_plan(conn.cursor(), queda_id, fuera_id)}
+    except fusion.FusionError as e:
+        return _error_json(400, str(e))
+    except Exception:
+        logger.exception("Error armando plan de unificación %s <- %s", queda_id, fuera_id)
+        return _error_json(500, "No se pudo preparar la vista previa.")
+    finally:
+        conn.close()
+
+
+class FusionIn(BaseModel):
+    pais: str
+    queda_id: int
+    fuera_id: int
+    # Debe ser True cuando hay advertencias de nivel "alto" (sexo/fecha distinta, familiares, etc.).
+    confirmar_advertencias: bool = False
+
+
+@app.post("/api/duplicados/unificar")
+def api_duplicados_unificar(request: Request, datos: FusionIn):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if datos.pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    user_id = _user_id_sesion(request)
+    conn = get_connection(datos.pais)
+    try:
+        cursor = conn.cursor()
+        # Misma validación que la vista previa, pero con las filas bloqueadas, para no confiar en lo que mostró el navegador.
+        plan = fusion.construir_plan(cursor, datos.queda_id, datos.fuera_id, bloquear=True)
+        if any(a["nivel"] == "alto" for a in plan["advertencias"]) and not datos.confirmar_advertencias:
+            conn.rollback()
+            return _error_json(409, "Hay diferencias entre los registros. Confirma que deseas unificarlos de todos modos.")
+
+        resultado = fusion.ejecutar_fusion(cursor, datos.queda_id, datos.fuera_id, user_id)
+        conn.commit()
+        logger.info(
+            "Beneficiarios unificados en %s: queda=%s eliminado=%s %s (usuario_id=%s)",
+            datos.pais, datos.queda_id, datos.fuera_id, resultado["contadores"], user_id
+        )
+        return {
+            "status": "ok",
+            "mensaje": "Beneficiarios unificados correctamente.",
+            "queda": resultado["plan"]["queda"],
+            "fuera": resultado["plan"]["fuera"],
+            "contadores": resultado["contadores"],
+        }
+
+    except fusion.FusionError as e:
+        conn.rollback()
+        return _error_json(400, str(e))
+    except Exception:
+        conn.rollback()
+        logger.exception("Error unificando beneficiarios queda=%s fuera=%s", datos.queda_id, datos.fuera_id)
+        return _error_json(500, "No se pudo unificar. No se guardó ningún cambio.")
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------
+# POSIBLES DUPLICADOS (detección automática)
+# Lista pares con mismo apellido, sexo y fecha de nacimiento y nombres iguales o
+# contenidos; cada par enlaza con la pantalla de unificación ya comparado.
+# ---------------------------------------------------
+@app.get("/beneficiarios/v2/posibles-duplicados", response_class=HTMLResponse)
+def posibles_duplicados(request: Request, pais: str = "vzla"):
+    usuario = _usuario_autenticado(request)
+    if not usuario:
+        return RedirectResponse(url="/login", status_code=302)
+    if pais not in PAISES_VALIDOS:
+        pais = "vzla"
+    return templates.TemplateResponse(request, "beneficiarios/posibles_duplicados.html", {
+        "request": request,
+        "usuario": usuario,
+        "pais": pais,
+    })
+
+
+@app.get("/api/duplicados/posibles")
+def api_duplicados_posibles(request: Request, pais: str):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    conn = get_connection(pais)
+    try:
+        return {"status": "ok", **fusion.listar_posibles_duplicados(conn.cursor())}
+    except Exception:
+        logger.exception("Error listando posibles duplicados")
+        return _error_json(500, "No se pudo generar la lista de posibles duplicados.")
+    finally:
+        conn.close()

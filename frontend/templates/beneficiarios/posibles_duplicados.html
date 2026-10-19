@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .table-card{overflow:hidden}
+  .table-card-head{padding:18px 20px;border-bottom:1px solid var(--ds-border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .table-card-head h2{font-size:1.05rem;font-weight:800;margin:0}
+  table{margin:0 !important;min-width:900px}
+  thead th{background:#f8fafc !important;color:#475467 !important;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ds-border) !important;padding:12px 14px !important;white-space:nowrap}
+  tbody td{padding:12px 14px !important;vertical-align:middle;border-color:#eef0f3 !important}
+  tbody tr:hover{background:#fffaf9}
+
+  .id-badge{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.78rem;font-weight:700;background:#f2f4f7;color:#344054;padding:3px 8px;border-radius:7px;white-space:nowrap}
+  .tag{display:inline-block;padding:4px 9px;border-radius:999px;font-size:.74rem;font-weight:800;white-space:nowrap}
+  .tag-alta{background:#fef3f2;color:#d92d20}
+  .tag-media{background:#fffaeb;color:#b54708}
+  .tag-gris{background:#f2f4f7;color:#475467}
+
+  .tile{background:#fff;border:1px solid var(--ds-border);border-radius:14px;padding:14px 16px;height:100%}
+  .tile .num{font-size:1.7rem;font-weight:800;line-height:1.1}
+  .tile .lbl{font-size:.8rem;color:var(--ds-muted)}
+
+  .persona .nom{font-weight:700}
+  .persona .meta{font-size:.8rem;color:var(--ds-muted)}
+
+  .btn-revisar{min-height:38px;border-radius:9px;border:0;background:var(--ds-coral);color:#fff;font-weight:700;padding:0 14px;text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap}
+  .btn-revisar:hover{filter:brightness(.97);color:#fff}
+  .input-group-text{border-color:#d0d5dd;border-radius:10px 0 0 10px;color:var(--ds-muted)}
+  .input-group .form-control{border-radius:0 10px 10px 0}
+  .pagination .page-link{color:#475467;border-color:var(--ds-border)}
+  .pagination .active .page-link{background:var(--ds-coral);border-color:var(--ds-coral);color:#fff}
+</style>
+
+<div class="container-fluid px-0" style="max-width:1280px;">
+
+  <div>
+    <div class="eyebrow">Beneficiarios</div>
+    <h1 class="page-title">Posibles duplicados</h1>
+    <p class="page-subtitle">Personas con el mismo apellido, sexo y fecha de nacimiento cuyos nombres son iguales o uno contiene al otro. Revisa cada par antes de unificar.</p>
+  </div>
+
+  <section class="toolbar-card">
+    <div class="row g-3 align-items-end">
+      <div class="col-lg-2">
+        <label class="form-label" for="pais">País</label>
+        <select id="pais" class="form-select">
+          <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+          <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+          <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
+        </select>
+      </div>
+      <div class="col-lg-3">
+        <label class="form-label" for="confianza">Coincidencia</label>
+        <select id="confianza" class="form-select">
+          <option value="">Todas</option>
+          <option value="alta">Alta (mismo nombre)</option>
+          <option value="media">Media (un nombre contiene al otro)</option>
+        </select>
+      </div>
+      <div class="col-lg-5">
+        <label class="form-label" for="buscar">Filtrar</label>
+        <div class="input-group">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input type="search" id="buscar" class="form-control" placeholder="Nombre, apellido o ID Digisalud">
+        </div>
+      </div>
+      <div class="col-lg-2">
+        <button type="button" class="btn-clear w-100" id="btnRecargar"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="row g-3 mt-1" id="tiles"></div>
+
+  <section class="table-card mt-4">
+    <div class="table-card-head">
+      <h2>Pares detectados</h2>
+      <div class="results-text text-secondary small" id="resumen"></div>
+    </div>
+    <div id="estado" class="empty-state"><i class="bi bi-hourglass-split"></i><div class="fw-bold">Buscando duplicados…</div></div>
+    <div class="table-responsive d-none" id="wrap">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th style="width:110px;">Coincidencia</th>
+            <th>Registro A</th>
+            <th>Registro B</th>
+            <th style="width:210px;">Nacimiento</th>
+            <th style="width:140px;"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <nav class="p-3 d-none" id="paginacion"><ul class="pagination pagination-sm justify-content-center mb-0" id="paginas"></ul></nav>
+  </section>
+</div>
+
+<script>
+const PAIS = {{ pais|tojson }};
+const POR_PAGINA = 25;
+const $ = id => document.getElementById(id);
+const el = (tag, clase, texto) => { const e = document.createElement(tag); if (clase) e.className = clase; if (texto !== undefined) e.textContent = texto; return e; };
+const norm = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const fechaLarga = iso => iso ? iso.split("-").reverse().join("/") : "—";
+
+let pares = [];
+let pagina = 1;
+
+function mostrarEstado(icono, titulo, detalle) {
+  const e = $("estado");
+  e.innerHTML = "";
+  e.append(el("i", `bi ${icono}`), el("div", "fw-bold mb-1", titulo), el("div", "", detalle || ""));
+  e.classList.remove("d-none");
+  $("wrap").classList.add("d-none");
+  $("paginacion").classList.add("d-none");
+}
+
+async function cargar() {
+  mostrarEstado("bi-hourglass-split", "Buscando duplicados…", "Puede tardar unos segundos.");
+  $("tiles").innerHTML = ""; $("resumen").textContent = "";
+  try {
+    const resp = await fetch(`/api/duplicados/posibles?pais=${encodeURIComponent(PAIS)}`, { credentials: "include" });
+    if (resp.status === 401) { window.location.href = "/login"; return; }
+    const data = await resp.json();
+    if (!resp.ok || data.status !== "ok") throw new Error(data.mensaje);
+    pares = data.pares;
+    pagina = 1;
+    renderTiles();
+    render();
+  } catch (e) {
+    mostrarEstado("bi-exclamation-triangle", "No se pudo cargar la lista", e.message || "");
+  }
+}
+
+function renderTiles() {
+  const alta = pares.filter(p => p.confianza === "alta").length;
+  [[pares.length, "Pares por revisar"], [alta, "Coincidencia alta"], [pares.length - alta, "Coincidencia media"]].forEach(([n, etq]) => {
+    const col = el("div", "col-6 col-lg-3");
+    const t = el("div", "tile");
+    t.append(el("div", "num", n), el("div", "lbl", etq));
+    col.append(t); $("tiles").append(col);
+  });
+}
+
+function filtrados() {
+  const conf = $("confianza").value;
+  const f = norm($("buscar").value.trim());
+  return pares.filter(p => {
+    if (conf && p.confianza !== conf) return false;
+    if (!f) return true;
+    return [p.a, p.b].some(x => norm(`${x.nombres} ${x.apellidos} ${x.id_digisalud}`).includes(f));
+  });
+}
+
+function celdaPersona(p) {
+  const td = el("td", "persona");
+  td.append(el("div", "nom", p.nombres), el("span", "id-badge", p.id_digisalud || "—"));
+  const partes = [`${p.jornadas} jornada${p.jornadas !== 1 ? "s" : ""}`, `${p.centros} centro${p.centros !== 1 ? "s" : ""}`, `${p.pesquisas} pesquisa${p.pesquisas !== 1 ? "s" : ""}`];
+  td.append(el("div", "meta mt-1", partes.join(" · ")));
+  return td;
+}
+
+function render() {
+  const lista = filtrados();
+  const totalPaginas = Math.max(Math.ceil(lista.length / POR_PAGINA), 1);
+  pagina = Math.min(pagina, totalPaginas);
+  $("resumen").textContent = `${lista.length} de ${pares.length} pares`;
+
+  if (!pares.length) return mostrarEstado("bi-patch-check", "No se detectaron posibles duplicados", "Todo indica que no hay beneficiarios repetidos con estos criterios.");
+  if (!lista.length) return mostrarEstado("bi-funnel", "Ningún par coincide con el filtro");
+
+  $("estado").classList.add("d-none");
+  $("wrap").classList.remove("d-none");
+  const tbody = $("tbody");
+  tbody.innerHTML = "";
+  lista.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA).forEach(par => {
+    const tr = el("tr");
+    const tdConf = el("td"); tdConf.append(el("span", `tag tag-${par.confianza}`, par.confianza === "alta" ? "Alta" : "Media"));
+    const tdFecha = el("td"); tdFecha.append(el("div", "", fechaLarga(par.a.fecha_nacimiento)), el("div", "small text-secondary", `${par.a.apellidos} · ${par.a.sexo}`));
+    const tdAcc = el("td", "text-end");
+    const enlace = el("a", "btn-revisar");
+    enlace.href = `/beneficiarios/v2/duplicados?${new URLSearchParams({ pais: PAIS, a: par.a.persona_id, b: par.b.persona_id })}`;
+    enlace.append(el("i", "bi bi-intersect me-1"), "Revisar");
+    tdAcc.append(enlace);
+    tr.append(tdConf, celdaPersona(par.a), celdaPersona(par.b), tdFecha, tdAcc);
+    tbody.append(tr);
+  });
+
+  const nav = $("paginas");
+  nav.innerHTML = "";
+  $("paginacion").classList.toggle("d-none", totalPaginas === 1);
+  for (let i = 1; i <= totalPaginas; i++) {
+    const li = el("li", "page-item" + (i === pagina ? " active" : ""));
+    const b = el("button", "page-link", i); b.type = "button";
+    b.addEventListener("click", () => { pagina = i; render(); });
+    li.append(b); nav.append(li);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  $("pais").addEventListener("change", function () {
+    window.location.search = new URLSearchParams({ pais: this.value }).toString();
+  });
+  $("confianza").addEventListener("change", () => { pagina = 1; render(); });
+  $("buscar").addEventListener("input", () => { pagina = 1; render(); });
+  $("btnRecargar").addEventListener("click", cargar);
+  cargar();
+});
+</script>
+{% endblock %}

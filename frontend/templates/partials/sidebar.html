@@ -2,6 +2,7 @@
 {% set ruta = request.url.path | replace('/carga_masiva/', '/', 1) %}
 {% set en_jornadas = ruta.startswith('/jornadas') %}
 {% set en_centros = ruta.startswith('/centros') %}
+{% set en_beneficiarios = ruta.startswith('/beneficiarios') %}
 <aside class="sidebar" id="sidebar">
   <a href="/carga" class="{{ 'active' if ruta == '/carga' }}"><i class="bi bi-house-door"></i> Inicio</a>
   <a href="/carga"><i class="bi bi-cloud-arrow-up"></i> Carga masiva</a>
@@ -26,7 +27,16 @@
     <a href="/centros/v2/copiar" class="sub-link {{ 'active' if ruta == '/centros/v2/copiar' }}">Copiar Beneficiarios J-C</a>
   </div>
 
-  <a href="/beneficiarios/v2" class="{{ 'active' if ruta.startswith('/beneficiarios') }}"><i class="bi bi-person-vcard"></i> Beneficiarios</a>
+  <a class="d-flex align-items-center {{ 'collapsed' if not en_beneficiarios }}" data-bs-toggle="collapse" href="#submenuBeneficiarios"
+     role="button" aria-expanded="{{ 'true' if en_beneficiarios else 'false' }}">
+    <i class="bi bi-person-vcard"></i>&nbsp; Beneficiarios
+    <i class="bi bi-chevron-down chevron"></i>
+  </a>
+  <div class="collapse {{ 'show' if en_beneficiarios }}" id="submenuBeneficiarios">
+    <a href="/beneficiarios/v2" class="sub-link {{ 'active' if ruta == '/beneficiarios/v2' }}">Gestionar Beneficiarios</a>
+    <a href="/beneficiarios/v2/duplicados" class="sub-link {{ 'active' if ruta == '/beneficiarios/v2/duplicados' }}">Unificar Duplicados</a>
+    <a href="/beneficiarios/v2/posibles-duplicados" class="sub-link {{ 'active' if ruta == '/beneficiarios/v2/posibles-duplicados' }}">Posibles Duplicados</a>
+  </div>
 
   <a href="/usuarios/v2" class="{{ 'active' if ruta.startswith('/usuarios') }}"><i class="bi bi-people"></i> Gestionar usuarios</a>
 
