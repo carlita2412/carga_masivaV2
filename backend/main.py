@@ -2406,7 +2406,7 @@ class EvalDupIn(BaseModel):
     centro_id: int
     modo: str                                   # 'seleccion' (un beneficiario) o 'exactas' (solo copias idénticas)
     persona_id: int | None = None
-    conservar: dict[str, int] = {}              # {fecha ISO: nº de carga que se conserva}
+    conservar: dict[str, int] = {}              # {"AAAA-MM-DD|PESQUISA": nº de carga que se conserva}
     esperado: int | None = None                 # total que vio el usuario en la vista previa
 
 

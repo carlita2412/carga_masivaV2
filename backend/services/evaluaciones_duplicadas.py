@@ -9,7 +9,10 @@ Definiciones:
   * Grupo repetido: mismas persona + centro + tipo de pesquisa + fecha de evaluación, con más de una fila.
     Solo se consideran las filas vigentes (`pesq_x_pac_status = 0`); las que tienen un timestamp en
     ese campo son versiones históricas y nunca se tocan.
-  * Una «carga» es el conjunto de filas que se guardaron en el mismo instante (`control_fecha_creacion`).
+  * Las mediciones se clasifican por PESQUISA (`tipo_pesquisa_grupo`: antropometría, sanguíneo, vitales…).
+    Solo se compara dentro de la misma pesquisa: PESO y HEMOGLOBINA nunca compiten entre sí.
+  * Una «carga» es el conjunto de filas de UNA pesquisa que se guardaron en el mismo instante
+    (`control_fecha_creacion`).
   * Grupo idéntico: todas sus filas tienen el mismo valor. Grupo con valores distintos: hay que decidir
     cuál carga se conserva.
 
@@ -20,6 +23,20 @@ TABLA = "psi_pesquisas_x_centro"
 FECHA = "pesq_x_pac_fecha_evauacion"
 VIGENTE = "pesq_x_pac_status = 0"
 LOTE_BORRADO = 500
+
+
+ETIQUETAS_PESQUISA = {
+    "ANTROPOMETRICO": "Antropometría",
+    "SANGUINEO": "Sanguíneo",
+    "LABORATORIO": "Laboratorio",
+    "VITALES": "Signos vitales",
+    "MEDICINA_GENERAL_PEDIATRIA": "Medicina general / pediatría",
+    "VACUNACION": "Vacunación",
+}
+
+
+def _etiqueta_pesquisa(grupo: str) -> str:
+    return ETIQUETAS_PESQUISA.get(grupo, grupo.replace("_", " ").capitalize())
 
 
 class EvaluacionesError(Exception):
@@ -150,7 +167,7 @@ def beneficiarios_del_centro(cursor, centro_id: int, incluir_sin_repetidas: bool
 
 def _filas_persona(cursor, centro_id: int, persona_id: int, bloquear: bool = False) -> list:
     cursor.execute(
-        f"SELECT x.idunico, x.tipo_pesquisa_id, t.tipo_pesquisa_nombre, x.pesq_x_pac_valor, x.{FECHA}, x.control_fecha_creacion "
+        f"SELECT x.idunico, x.tipo_pesquisa_id, t.tipo_pesquisa_nombre, t.tipo_pesquisa_grupo, x.pesq_x_pac_valor, x.{FECHA}, x.control_fecha_creacion "
         f"FROM {TABLA} x LEFT JOIN psi_tipo_pesquisas t ON t.tipo_pesquisa_id = x.tipo_pesquisa_id "
         f"WHERE x.centro_id = %s AND x.persona_id = %s AND x.{VIGENTE} "
         f"ORDER BY x.{FECHA}, x.control_fecha_creacion, x.idunico" + (" FOR UPDATE" if bloquear else ""),
@@ -160,28 +177,35 @@ def _filas_persona(cursor, centro_id: int, persona_id: int, bloquear: bool = Fal
 
 
 def _agrupar(filas) -> list:
-    """Agrupa por fecha: copias (cargas) numeradas desde 1 y filas por tipo de pesquisa."""
+    """Agrupa por fecha y, dentro de cada fecha, por PESQUISA. Las cargas (copias) se numeran desde 1
+    dentro de cada pesquisa: así una carga de antropometría no se confunde con una de sanguíneo."""
     por_fecha = {}
-    for idunico, tipo_id, tipo_nombre, valor, fecha, creada in filas:
-        f = por_fecha.setdefault(_iso(fecha), {"copias": {}, "tipos": {}})
-        clave_copia = _hora(creada)
-        copia = f["copias"].setdefault(clave_copia, len(f["copias"]) + 1)
-        t = f["tipos"].setdefault(tipo_id, {"tipo_id": tipo_id, "nombre": tipo_nombre or f"Tipo {tipo_id}", "filas": []})
+    for idunico, tipo_id, tipo_nombre, grupo, valor, fecha, creada in filas:
+        grupo = grupo or "SIN_PESQUISA"
+        g = por_fecha.setdefault(_iso(fecha), {}).setdefault(grupo, {"copias": {}, "tipos": {}})
+        copia = g["copias"].setdefault(_hora(creada), len(g["copias"]) + 1)
+        t = g["tipos"].setdefault(tipo_id, {"tipo_id": tipo_id, "nombre": tipo_nombre or f"Tipo {tipo_id}", "filas": []})
         t["filas"].append({"idunico": idunico, "copia": copia, "valor": "" if valor is None else str(valor)})
     resultado = []
     for fecha in sorted(por_fecha):
-        f = por_fecha[fecha]
-        tipos = list(f["tipos"].values())
-        repetida = any(len(t["filas"]) > 1 for t in tipos)
-        identica = repetida and all(
-            len({fila["valor"].strip() for fila in t["filas"]}) == 1 for t in tipos if len(t["filas"]) > 1
-        )
+        grupos = []
+        for grupo, g in sorted(por_fecha[fecha].items()):
+            tipos = list(g["tipos"].values())
+            repetidos = [t for t in tipos if len(t["filas"]) > 1]
+            grupos.append({
+                "grupo": grupo,
+                "etiqueta": _etiqueta_pesquisa(grupo),
+                "copias": [{"n": n, "creada": c} for c, n in sorted(g["copias"].items(), key=lambda kv: kv[1])],
+                "tipos": tipos,
+                "repetida": bool(repetidos),
+                "identica": bool(repetidos) and all(len({x["valor"].strip() for x in t["filas"]}) == 1 for t in repetidos),
+            })
+        con_repetidas = [g for g in grupos if g["repetida"]]
         resultado.append({
             "fecha": fecha,
-            "copias": [{"n": n, "creada": c} for c, n in sorted(f["copias"].items(), key=lambda kv: kv[1])],
-            "tipos": tipos,
-            "repetida": repetida,
-            "identica": identica,
+            "grupos": grupos,
+            "repetida": bool(con_repetidas),
+            "identica": bool(con_repetidas) and all(g["identica"] for g in con_repetidas),
         })
     return resultado
 
@@ -211,22 +235,24 @@ def detalle_beneficiario(cursor, centro_id: int, persona_id: int) -> dict:
 # ---------------------------------------------------------------------------
 
 def _plan_seleccion(fechas: list, conservar: dict) -> list:
-    """idunico a eliminar. En cada fecha repetida se conserva la carga elegida (por defecto la primera);
-    un tipo que NO existe en esa carga conserva su fila más antigua: nunca se pierde un tipo de pesquisa."""
+    """idunico a eliminar. En cada fecha y pesquisa con repetidas se conserva la carga elegida (clave
+    «AAAA-MM-DD|PESQUISA», por defecto la primera); un tipo que NO existe en esa carga conserva su fila
+    más antigua: nunca se pierde un tipo de medición."""
     eliminar = []
     for f in fechas:
-        if not f["repetida"]:
-            continue
-        elegida = int(conservar.get(f["fecha"], 1))
-        if elegida not in {c["n"] for c in f["copias"]}:
-            raise EvaluacionesError(f"La carga elegida para el {f['fecha']} no existe.")
-        for t in f["tipos"]:
-            filas = t["filas"]
-            if len(filas) < 2:
+        for g in f["grupos"]:
+            if not g["repetida"]:
                 continue
-            candidatas = [x for x in filas if x["copia"] == elegida] or filas
-            conservada = min(x["idunico"] for x in candidatas)
-            eliminar += [x["idunico"] for x in filas if x["idunico"] != conservada]
+            elegida = int(conservar.get(f"{f['fecha']}|{g['grupo']}", 1))
+            if elegida not in {c["n"] for c in g["copias"]}:
+                raise EvaluacionesError(f"La carga elegida para {g['etiqueta']} del {f['fecha']} no existe.")
+            for t in g["tipos"]:
+                filas = t["filas"]
+                if len(filas) < 2:
+                    continue
+                candidatas = [x for x in filas if x["copia"] == elegida] or filas
+                conservada = min(x["idunico"] for x in candidatas)
+                eliminar += [x["idunico"] for x in filas if x["idunico"] != conservada]
     return eliminar
 
 

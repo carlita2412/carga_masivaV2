@@ -59,7 +59,7 @@
   <div>
     <div class="eyebrow">Centros</div>
     <h1 class="page-title">Evaluaciones duplicadas</h1>
-    <p class="page-subtitle">Detecta las mediciones que quedaron repetidas en un centro (por ejemplo, un Excel cargado varias veces) y elimina las copias sobrantes.</p>
+    <p class="page-subtitle">Detecta las mediciones que quedaron repetidas en un centro (por ejemplo, un Excel cargado varias veces) y elimina las copias sobrantes. Solo se compara dentro de la misma pesquisa: antropometría con antropometría, sanguíneo con sanguíneo, etc.</p>
   </div>
 
   <!-- Filtros -->
@@ -299,7 +299,7 @@ async function abrirDetalle(personaId) {
   try {
     detalle = await api(`/api/eval_dup/detalle?pais=${PAIS}&centro_id=${centroActual.id}&persona_id=${personaId}`);
     conservar = {};
-    detalle.fechas.forEach(f => { if (f.repetida) conservar[f.fecha] = 1; });
+    detalle.fechas.forEach(f => f.grupos.forEach(g => { if (g.repetida) conservar[clave(f, g)] = 1; }));
     $("vistaLista").classList.add("d-none");
     $("vistaDetalle").classList.remove("d-none");
     renderDetalle();
@@ -307,19 +307,21 @@ async function abrirDetalle(personaId) {
   } catch (e) { mostrarToast(e.message, "error"); }
 }
 
+const clave = (f, g) => `${f.fecha}|${g.grupo}`;
+
 // Misma regla que el servidor: se conserva la fila de la carga elegida; si el tipo no está en esa carga, la más antigua.
 function idsAEliminar() {
   const ids = new Set();
-  detalle.fechas.filter(f => f.repetida).forEach(f => {
-    const elegida = conservar[f.fecha] || 1;
-    f.tipos.forEach(t => {
+  detalle.fechas.forEach(f => f.grupos.filter(g => g.repetida).forEach(g => {
+    const elegida = conservar[clave(f, g)] || 1;
+    g.tipos.forEach(t => {
       if (t.filas.length < 2) return;
       const candidatas = t.filas.filter(x => x.copia === elegida);
       const base = candidatas.length ? candidatas : t.filas;
       const conservada = Math.min(...base.map(x => x.idunico));
       t.filas.forEach(x => { if (x.idunico !== conservada) ids.add(x.idunico); });
     });
-  });
+  }));
   return ids;
 }
 
@@ -346,52 +348,53 @@ function renderDetalle() {
   const cont = $("fechasRepetidas");
   cont.innerHTML = "";
   const eliminar = idsAEliminar();
-  repetidas.forEach(f => cont.append(tarjetaFecha(f, eliminar)));
+  repetidas.forEach(f => f.grupos.filter(g => g.repetida).forEach(g => cont.append(tarjetaFecha(f, g, eliminar))));
 
   $("cardSinRepetidas").classList.toggle("d-none", !sin.length);
   $("cntSinRepetidas").textContent = plural(sin.length, "fecha", "fechas");
   const chips = $("chipsSinRepetidas");
   chips.innerHTML = "";
-  sin.forEach(f => chips.append(el("span", "tag tag-gris", `${fechaLarga(f.fecha)} · ${plural(f.tipos.length, "medición", "mediciones")}`)));
+  sin.forEach(f => chips.append(el("span", "tag tag-gris", `${fechaLarga(f.fecha)} · ${f.grupos.map(g => `${g.etiqueta} (${g.tipos.length})`).join(", ")}`)));
 
   actualizarAccion(eliminar.size);
 }
 
-function tarjetaFecha(f, eliminar) {
+function tarjetaFecha(f, g, eliminar) {
+  const k = clave(f, g);
   const card = el("div", "fecha-card");
   const cab = el("div", "cab");
-  const t = el("div", "t"); t.append(`${fechaLarga(f.fecha)} · `, el("span", "text-secondary fw-normal", plural(f.copias.length, "carga", "cargas")));
-  cab.append(t, el("span", "tag " + (f.identica ? "tag-azul" : "tag-ambar"), f.identica ? "Copias idénticas" : "Hay valores distintos: elige qué carga conservar"));
+  const t = el("div", "t");
+  t.append(`${fechaLarga(f.fecha)} · `, el("span", "tag tag-azul me-2", g.etiqueta), el("span", "text-secondary fw-normal", plural(g.copias.length, "carga", "cargas")));
+  cab.append(t, el("span", "tag " + (g.identica ? "tag-azul" : "tag-ambar"), g.identica ? "Copias idénticas" : "Hay valores distintos: elige qué carga conservar"));
   card.append(cab);
 
   const wrap = el("div", "table-responsive");
   const tabla = el("table", "table align-middle");
   const thead = el("thead"); const trh = el("tr"); trh.append(el("th", "", "Medición"));
-  f.copias.forEach(c => {
-    const th = el("th", "th-copia" + ((conservar[f.fecha] || 1) === c.n ? " elegida" : ""));
+  g.copias.forEach(c => {
+    const th = el("th", "th-copia" + ((conservar[k] || 1) === c.n ? " elegida" : ""));
     const lbl = el("label");
-    const radio = el("input"); radio.type = "radio"; radio.name = `copia-${f.fecha}`; radio.className = "form-check-input";
-    radio.checked = (conservar[f.fecha] || 1) === c.n;
-    radio.addEventListener("change", () => { conservar[f.fecha] = c.n; renderDetalle(); });
+    const radio = el("input"); radio.type = "radio"; radio.name = `copia-${k}`; radio.className = "form-check-input";
+    radio.checked = (conservar[k] || 1) === c.n;
+    radio.addEventListener("change", () => { conservar[k] = c.n; renderDetalle(); });
     lbl.append(radio, el("span", "", `Conservar carga ${c.n}`), el("small", "", c.creada));
     th.append(lbl); trh.append(th);
   });
   thead.append(trh); tabla.append(thead);
 
   const tbody = el("tbody");
-  f.tipos.forEach(tp => {
+  g.tipos.forEach(tp => {
     const tr = el("tr");
     tr.append(el("td", "fw-semibold", tp.nombre));
     const distintos = new Set(tp.filas.map(x => x.valor.trim())).size > 1;
-    f.copias.forEach(c => {
+    g.copias.forEach(c => {
       const filas = tp.filas.filter(x => x.copia === c.n);
       const td = el("td", "c-valor");
       if (!filas.length) { td.classList.add("vacio"); td.textContent = "—"; }
       else {
         td.textContent = filas.map(x => x.valor || "(vacío)").join(" / ");
         if (tp.filas.length > 1) {
-          if (filas.every(x => eliminar.has(x.idunico))) td.classList.add("se-elimina");
-          else td.classList.add("se-queda");
+          td.classList.add(filas.every(x => eliminar.has(x.idunico)) ? "se-elimina" : "se-queda");
           if (distintos) td.classList.add("difiere");
         }
       }
@@ -400,12 +403,20 @@ function tarjetaFecha(f, eliminar) {
     tbody.append(tr);
   });
   tabla.append(tbody); wrap.append(tabla); card.append(wrap);
+
+  // Otras pesquisas de la misma fecha que no tienen repetidas: se aclaran para que no se confundan con estas.
+  const otras = f.grupos.filter(x => x !== g && !x.repetida);
+  if (otras.length) {
+    const pie = el("div", "px-3 py-2 small text-secondary border-top");
+    pie.textContent = "Sin repetidas en esta fecha: " + otras.map(x => `${x.etiqueta} (${plural(x.tipos.length, "medición", "mediciones")})`).join(", ") + ".";
+    card.append(pie);
+  }
   return card;
 }
 
 function actualizarAccion(n) {
   $("resumenAccion").textContent = n
-    ? `Se eliminarán ${plural(n, "medición repetida", "mediciones repetidas")}; las tachadas en rojo. Se conserva la carga marcada en cada fecha.`
+    ? `${n === 1 ? "Se eliminará" : "Se eliminarán"} ${plural(n, "medición repetida", "mediciones repetidas")}; las tachadas en rojo. Se conserva la carga marcada en cada fecha.`
     : "No hay nada que eliminar.";
   $("btnEliminar").disabled = n === 0;
   $("btnEliminarTexto").textContent = n ? `Eliminar ${plural(n, "repetida", "repetidas")}` : "Eliminar repetidas";
@@ -422,7 +433,7 @@ async function confirmarYEliminar(base, descripcion) {
   const quien = base.modo === "exactas" && !base.persona_id ? ` de ${plural(plan.beneficiarios, "beneficiario", "beneficiarios")}` : "";
   const nota = base.modo === "exactas" ? " Se conserva la primera carga de cada medición." : " Se conserva la carga elegida en cada fecha.";
   confirmarAccion(
-    `Se eliminarán ${plural(plan.total, "medición repetida", "mediciones repetidas")}${quien} ${descripcion}.${nota} Esta acción no se puede deshacer. ¿Continuar?`,
+    `${plan.total === 1 ? "Se eliminará" : "Se eliminarán"} ${plural(plan.total, "medición repetida", "mediciones repetidas")}${quien} ${descripcion}.${nota} Esta acción no se puede deshacer. ¿Continuar?`,
     async () => {
       try {
         const r = await post("/api/eval_dup/eliminar", { ...cuerpo, esperado: plan.total });
@@ -435,7 +446,7 @@ async function confirmarYEliminar(base, descripcion) {
 function mostrarExito(r) {
   const caja = $("modalMessage");
   caja.innerHTML = "";
-  caja.append(el("p", "mb-0", `Se eliminaron ${plural(r.eliminadas, "medición repetida", "mediciones repetidas")}${r.beneficiarios > 1 ? ` de ${r.beneficiarios} beneficiarios` : ""}.`));
+  caja.append(el("p", "mb-0", `${r.eliminadas === 1 ? "Se eliminó" : "Se eliminaron"} ${plural(r.eliminadas, "medición repetida", "mediciones repetidas")}${r.beneficiarios > 1 ? ` de ${r.beneficiarios} beneficiarios` : ""}.`));
   document.querySelector("#successModal .btn-save").removeAttribute("onclick");   // el modal base recarga la página
   const modalEl = $("successModal");
   modalEl.addEventListener("hidden.bs.modal", despuesDeEliminar, { once: true });
