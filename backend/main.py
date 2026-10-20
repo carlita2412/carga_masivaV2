@@ -2446,3 +2446,82 @@ def api_evdup_eliminar(request: Request, datos: EvalDupIn):
         return _error_json(500, "No se pudieron eliminar las evaluaciones. No se guardó ningún cambio.")
     finally:
         conn.close()
+
+
+# ---------------------------------------------------
+# BENEFICIARIOS HUÉRFANOS
+# Personas que nunca fueron evaluadas, no están en ninguna jornada ni centro y no tienen relación
+# familiar con otro beneficiario. Se listan con su fecha de registro para decidir si se eliminan.
+# La lógica vive en backend/services/beneficiarios_huerfanos.py.
+# ---------------------------------------------------
+from backend.services import beneficiarios_huerfanos as huerfanos
+
+
+@app.get("/beneficiarios/v2/huerfanos", response_class=HTMLResponse)
+def beneficiarios_huerfanos(request: Request, pais: str = "vzla"):
+    usuario = _usuario_autenticado(request)
+    if not usuario:
+        return RedirectResponse(url="/login", status_code=302)
+    if pais not in PAISES_VALIDOS:
+        pais = "vzla"
+    return templates.TemplateResponse(request, "beneficiarios/huerfanos.html", {
+        "request": request,
+        "usuario": usuario,
+        "pais": pais,
+    })
+
+
+@app.get("/api/huerfanos")
+def api_huerfanos_listar(request: Request, pais: str):
+    """Devuelve todos los huérfanos de una vez; la búsqueda, el rango de fechas, el orden y la paginación
+    los hace el navegador (la consulta pesada solo corre al abrir, al actualizar y tras eliminar)."""
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    conn = get_connection(pais)
+    try:
+        return {"status": "ok", **huerfanos.listar(conn.cursor())}
+    except Exception:
+        logger.exception("Error listando beneficiarios huérfanos")
+        return _error_json(500, "No se pudo generar la lista.")
+    finally:
+        conn.close()
+
+
+class HuerfanosEliminarIn(BaseModel):
+    pais: str
+    persona_ids: list[int]
+
+
+@app.post("/api/huerfanos/eliminar")
+def api_huerfanos_eliminar(request: Request, datos: HuerfanosEliminarIn):
+    if not _usuario_autenticado(request):
+        return _respuesta_no_autenticado()
+    if datos.pais not in PAISES_VALIDOS:
+        return _error_json(400, "País no válido.")
+
+    user_id = _user_id_sesion(request)
+    conn = get_connection(datos.pais)
+    try:
+        resultado = huerfanos.eliminar(conn.cursor(), datos.persona_ids)
+        conn.commit()
+        logger.info(
+            "Beneficiarios huérfanos eliminados en %s: %s (ids=%s, omitidos=%s, usuario_id=%s)",
+            datos.pais, resultado["eliminados"], resultado["ids_eliminados"], resultado["omitidos"], user_id
+        )
+        return {"status": "ok", **{k: v for k, v in resultado.items() if k != "ids_eliminados"}}
+    except huerfanos.HuerfanosError as e:
+        conn.rollback()
+        return _error_json(400, str(e))
+    except IntegrityError:
+        conn.rollback()
+        logger.exception("Un beneficiario huérfano tenía una referencia inesperada")
+        return _error_json(409, "Algún beneficiario tiene un vínculo que no se vio en la lista. No se guardó ningún cambio; recarga la lista.")
+    except Exception:
+        conn.rollback()
+        logger.exception("Error eliminando beneficiarios huérfanos")
+        return _error_json(500, "No se pudieron eliminar los beneficiarios. No se guardó ningún cambio.")
+    finally:
+        conn.close()

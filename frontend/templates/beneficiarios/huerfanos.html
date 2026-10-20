@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .table-card{overflow:hidden}
+  .table-card-head{padding:18px 20px;border-bottom:1px solid var(--ds-border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .table-card-head h2{font-size:1.05rem;font-weight:800;margin:0}
+  table{margin:0 !important;min-width:980px}
+  thead th{background:#f8fafc !important;color:#475467 !important;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--ds-border) !important;padding:12px 14px !important;white-space:nowrap}
+  tbody td{padding:11px 14px !important;vertical-align:middle;border-color:#eef0f3 !important}
+  tbody tr:hover{background:#fffaf9}
+  tbody tr.marcada{background:#fff3f2}
+
+  .id-badge{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8rem;font-weight:700;background:#f2f4f7;color:#344054;padding:4px 8px;border-radius:7px;white-space:nowrap}
+  .sexo-badge{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;font-weight:800;font-size:.8rem}
+  .sexo-M{background:#eef4ff;color:#3559c7}
+  .sexo-F{background:#fdf0f6;color:#b43c7a}
+  .registro{font-weight:700;white-space:nowrap}
+  .registro small{display:block;font-weight:500;color:var(--ds-muted)}
+  .reciente{color:#b54708}
+
+  .tile{background:#fff;border:1px solid var(--ds-border);border-radius:14px;padding:14px 16px;height:100%}
+  .tile .num{font-size:1.5rem;font-weight:800;line-height:1.15}
+  .tile .lbl{font-size:.8rem;color:var(--ds-muted)}
+
+  .btn-del{width:36px;height:36px;border:1px solid #fda29b;border-radius:9px;display:grid;place-items:center;background:#fff;color:#d92d20;cursor:pointer;transition:.15s}
+  .btn-del:hover{background:#fef3f2;transform:translateY(-1px)}
+  .btn-peligro{min-height:44px;border-radius:10px;border:0;background:#d92d20;color:#fff;font-weight:700;padding:0 20px}
+  .btn-peligro:disabled{background:#f4a7a1;cursor:not-allowed}
+  .btn-peligro:not(:disabled):hover{filter:brightness(.96);color:#fff}
+  .action-bar{padding:14px 20px;border-top:1px solid var(--ds-border);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .form-check-input{width:1.15rem;height:1.15rem;cursor:pointer}
+  .form-check-input:checked{background-color:var(--ds-coral);border-color:var(--ds-coral)}
+  .input-group-text{border-color:#d0d5dd;border-radius:10px 0 0 10px;color:var(--ds-muted)}
+  .input-group .form-control{border-radius:0 10px 10px 0}
+  .criterio{background:#f9fafb;border:1px solid var(--ds-border);border-radius:12px;padding:12px 16px;font-size:.88rem;color:#475467;margin-top:16px}
+  .criterio ul{margin:6px 0 0;padding-left:18px}
+</style>
+
+<div class="container-fluid px-0" style="max-width:1280px;">
+
+  <div>
+    <div class="eyebrow">Beneficiarios</div>
+    <h1 class="page-title">Beneficiarios sin actividad</h1>
+    <p class="page-subtitle">Personas registradas que nunca fueron evaluadas, no están en ninguna jornada ni centro y no tienen relación familiar con otro beneficiario. Revisa la fecha de registro y elimina las que no sirvan.</p>
+  </div>
+
+  <section class="toolbar-card">
+    <div class="row g-3 align-items-end">
+      <div class="col-lg-2">
+        <label class="form-label" for="pais">País</label>
+        <select id="pais" class="form-select">
+          <option value="vzla" {% if pais == 'vzla' %}selected{% endif %}>Venezuela</option>
+          <option value="colombia" {% if pais == 'colombia' %}selected{% endif %}>Colombia</option>
+          <option value="elsalvador" {% if pais == 'elsalvador' %}selected{% endif %}>El Salvador</option>
+        </select>
+      </div>
+      <div class="col-lg-3">
+        <label class="form-label" for="buscar">Buscar</label>
+        <div class="input-group">
+          <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+          <input type="search" id="buscar" class="form-control" placeholder="ID, nombre o apellido">
+        </div>
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label" for="desde">Registrados desde</label>
+        <input type="date" id="desde" class="form-control">
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label" for="hasta">Hasta</label>
+        <input type="date" id="hasta" class="form-control">
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label" for="orden">Orden</label>
+        <select id="orden" class="form-select">
+          <option value="reciente">Más recientes primero</option>
+          <option value="antiguo">Más antiguos primero</option>
+          <option value="nombre">Apellido y nombre</option>
+        </select>
+      </div>
+      <div class="col-lg-1 d-flex gap-2">
+        <button type="button" class="btn-clear flex-fill" id="btnLimpiar" title="Limpiar filtros"><i class="bi bi-x-lg"></i></button>
+        <button type="button" class="btn-clear flex-fill" id="btnActualizar" title="Volver a consultar"><i class="bi bi-arrow-clockwise"></i></button>
+      </div>
+    </div>
+  </section>
+
+  <div class="row g-3 mt-1" id="tiles"></div>
+
+  <section class="table-card mt-4">
+    <div class="table-card-head">
+      <h2>Listado</h2>
+      <div class="results-text text-secondary small" id="resumen"></div>
+    </div>
+    <div id="estado" class="empty-state"><i class="bi bi-hourglass-split"></i><div class="fw-bold">Buscando…</div></div>
+    <div class="table-responsive d-none" id="wrap">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th style="width:44px;"><input type="checkbox" class="form-check-input" id="chkPagina" title="Marcar los de esta página"></th>
+            <th>ID Digisalud</th><th>Nombres</th><th>Apellidos</th>
+            <th style="width:60px;">Sexo</th><th style="width:120px;">Nacimiento</th>
+            <th style="width:150px;">Fecha de registro</th><th>Origen</th><th>Registrado por</th>
+            <th style="width:64px;"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="action-bar d-none" id="barra">
+      <div class="d-flex align-items-center gap-2">
+        <button type="button" class="btn-clear" id="btnAnterior"><i class="bi bi-chevron-left"></i></button>
+        <span class="small text-secondary" id="paginaTexto"></span>
+        <button type="button" class="btn-clear" id="btnSiguiente"><i class="bi bi-chevron-right"></i></button>
+      </div>
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <span class="small text-secondary" id="seleccionTexto">Ninguno seleccionado</span>
+        <button type="button" class="btn-peligro" id="btnEliminarSel" disabled><i class="bi bi-trash3 me-1"></i>Eliminar seleccionados</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="criterio">
+    <strong>Se muestran solo personas que NO tienen:</strong>
+    <ul>
+      <li>inscripción en ninguna jornada ni en ningún centro;</li>
+      <li>ninguna evaluación (pesquisas de jornada o de centro, ni evaluaciones de campo);</li>
+      <li>relación familiar con otro beneficiario, ni estar como responsable de otro;</li>
+      <li>encuestas asociadas.</li>
+    </ul>
+    <div class="mt-2">Antes de eliminar, el sistema vuelve a comprobarlo: si alguien recibió un vínculo mientras tenías la lista abierta, no se elimina.</div>
+  </div>
+</div>
+
+<script>
+const PAIS = {{ pais|tojson }};
+const POR_PAGINA = 50;
+const $ = id => document.getElementById(id);
+const el = (tag, clase, texto) => { const e = document.createElement(tag); if (clase) e.className = clase; if (texto !== undefined) e.textContent = texto; return e; };
+const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`;
+const fechaLarga = iso => iso ? iso.split("-").reverse().join("/") : "—";
+const fechaHora = txt => {                       // "AAAA-MM-DD HH:MM" -> ["DD/MM/AAAA", "HH:MM"]
+  if (!txt) return ["—", ""];
+  const [f, h] = txt.split(" ");
+  return [fechaLarga(f), h || ""];
+};
+const normalizar = t => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+let todos = [];            // todos los huérfanos que devolvió el servidor
+let vista = [];            // los que pasan los filtros, ya ordenados
+let truncado = false;
+let pagina = 1;
+let seleccion = new Map(); // persona_id -> {id, nombre, idd, registro}
+let solicitud = 0;
+let temporizador = null;
+
+async function api(url, opciones) {
+  const resp = await fetch(url, { credentials: "include", ...opciones });
+  if (resp.status === 401) { window.location.href = "/login"; throw new Error("Sesión expirada"); }
+  const data = await resp.json();
+  if (!resp.ok || data.status !== "ok") throw new Error(data.mensaje || "Ocurrió un error inesperado.");
+  return data;
+}
+
+function estado(icono, titulo, detalle) {
+  const e = $("estado");
+  e.innerHTML = "";
+  e.append(el("i", `bi ${icono}`), el("div", "fw-bold mb-1", titulo), el("div", "", detalle || ""));
+  e.classList.remove("d-none");
+  $("wrap").classList.add("d-none"); $("barra").classList.add("d-none");
+}
+
+// Consulta pesada: solo al abrir, al actualizar y después de eliminar.
+async function cargar() {
+  const mio = ++solicitud;
+  estado("bi-hourglass-split", "Buscando beneficiarios sin actividad…", "Puede tardar unos segundos.");
+  $("tiles").innerHTML = ""; $("resumen").textContent = "";
+  try {
+    const d = await api(`/api/huerfanos?pais=${PAIS}`);
+    if (mio !== solicitud) return;
+    todos = d.beneficiarios; truncado = d.truncado;
+    const existentes = new Set(todos.map(b => b.persona_id));
+    [...seleccion.keys()].forEach(k => { if (!existentes.has(k)) seleccion.delete(k); });
+    filtrar();
+  } catch (e) {
+    if (mio === solicitud) estado("bi-exclamation-triangle", "No se pudo cargar la lista", e.message);
+  }
+}
+
+// Búsqueda, rango de fechas y orden: instantáneos, en el navegador.
+function filtrar(reiniciarPagina = false) {
+  if (reiniciarPagina) pagina = 1;
+  const q = normalizar($("buscar").value.trim());
+  const desde = $("desde").value, hasta = $("hasta").value;
+  vista = todos.filter(b => {
+    if (q && !normalizar(`${b.id_digisalud} ${b.nombres} ${b.apellidos}`).includes(q)) return false;
+    const dia = b.fecha_registro.slice(0, 10);
+    if (desde && (!dia || dia < desde)) return false;
+    if (hasta && (!dia || dia > hasta)) return false;
+    return true;
+  });
+  const orden = $("orden").value;
+  const porFecha = (a, b) => (a.fecha_registro || "").localeCompare(b.fecha_registro || "");
+  if (orden === "reciente") vista.sort((a, b) => porFecha(b, a));
+  else if (orden === "antiguo") vista.sort(porFecha);
+  else vista.sort((a, b) => `${a.apellidos} ${a.nombres}`.localeCompare(`${b.apellidos} ${b.nombres}`, "es"));
+  renderTiles(); renderTabla();
+}
+
+function renderTiles() {
+  const fechas = vista.map(b => b.fecha_registro).filter(Boolean).sort();
+  const t = $("tiles");
+  t.innerHTML = "";
+  [[vista.length, vista.length === todos.length ? "Beneficiarios sin actividad" : `Con los filtros (de ${todos.length})`],
+   [fechas.length ? fechaHora(fechas[0])[0] : "—", "Registro más antiguo"],
+   [fechas.length ? fechaHora(fechas[fechas.length - 1])[0] : "—", "Registro más reciente"]].forEach(([n, etq]) => {
+    const col = el("div", "col-6 col-lg-3");
+    const c = el("div", "tile"); c.append(el("div", "num", n), el("div", "lbl", etq));
+    col.append(c); t.append(col);
+  });
+}
+
+const paginaActual = () => vista.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+
+function renderTabla() {
+  const totalPaginas = Math.max(Math.ceil(vista.length / POR_PAGINA), 1);
+  pagina = Math.min(Math.max(pagina, 1), totalPaginas);
+  $("resumen").textContent = plural(vista.length, "beneficiario", "beneficiarios") + (truncado ? " · se muestran los primeros resultados" : "");
+  if (!vista.length) {
+    return estado("bi-patch-check", todos.length ? "Ningún beneficiario coincide con los filtros" : "No hay beneficiarios sin actividad", todos.length ? "" : "Todos tienen jornadas, centros, evaluaciones o familiares.");
+  }
+  $("estado").classList.add("d-none"); $("wrap").classList.remove("d-none"); $("barra").classList.remove("d-none");
+  const hoy = Date.now();
+  const tbody = $("tbody");
+  tbody.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  paginaActual().forEach(b => {
+    const tr = el("tr");
+    tr.dataset.id = b.persona_id;
+    if (seleccion.has(b.persona_id)) tr.classList.add("marcada");
+
+    const chk = el("input", "form-check-input"); chk.type = "checkbox"; chk.checked = seleccion.has(b.persona_id);
+    chk.addEventListener("change", () => alternar(b, chk.checked));
+    const tdChk = el("td"); tdChk.append(chk);
+
+    const tdId = el("td"); tdId.append(el("span", "id-badge", b.id_digisalud || "—"));
+    const tdSexo = el("td"); tdSexo.append(el("span", `sexo-badge sexo-${b.sexo}`, b.sexo || "—"));
+
+    const [f, h] = fechaHora(b.fecha_registro);
+    const dias = b.fecha_registro ? (hoy - new Date(b.fecha_registro.replace(" ", "T")).getTime()) / 86400000 : null;
+    const tdReg = el("td", "registro" + (dias !== null && dias < 7 ? " reciente" : ""));
+    tdReg.append(f, el("small", "", dias !== null && dias < 7 ? `${h} · reciente` : h));
+
+    const btn = el("button", "btn-del"); btn.type = "button"; btn.title = "Eliminar este beneficiario";
+    btn.append(el("i", "bi bi-trash3"));
+    btn.addEventListener("click", () => confirmarEliminacion([{ id: b.persona_id, nombre: `${b.nombres} ${b.apellidos}`.trim(), idd: b.id_digisalud, registro: f }]));
+    const tdAcc = el("td", "text-end"); tdAcc.append(btn);
+
+    tr.append(tdChk, tdId, el("td", "fw-semibold", b.nombres), el("td", "", b.apellidos), tdSexo,
+      el("td", "", fechaLarga(b.fecha_nacimiento)), tdReg, el("td", "text-secondary", b.origen || "—"), el("td", "text-secondary small", b.registrado_por || "—"), tdAcc);
+    frag.append(tr);
+  });
+  tbody.append(frag);
+  $("paginaTexto").textContent = `Página ${pagina} de ${totalPaginas}`;
+  $("btnAnterior").disabled = pagina <= 1;
+  $("btnSiguiente").disabled = pagina >= totalPaginas;
+  actualizarSeleccion();
+}
+
+function alternar(b, marcado) {
+  const [f] = fechaHora(b.fecha_registro);
+  if (marcado) seleccion.set(b.persona_id, { id: b.persona_id, nombre: `${b.nombres} ${b.apellidos}`.trim(), idd: b.id_digisalud, registro: f });
+  else seleccion.delete(b.persona_id);
+  actualizarSeleccion();
+}
+
+function actualizarSeleccion() {
+  document.querySelectorAll("#tbody tr").forEach(tr => {
+    const on = seleccion.has(tr.dataset.id);
+    tr.classList.toggle("marcada", on);
+    tr.querySelector("input").checked = on;
+  });
+  const enPagina = paginaActual();
+  const marcadosAqui = enPagina.filter(b => seleccion.has(b.persona_id)).length;
+  $("chkPagina").checked = enPagina.length > 0 && marcadosAqui === enPagina.length;
+  $("chkPagina").indeterminate = marcadosAqui > 0 && marcadosAqui < enPagina.length;
+  const n = seleccion.size;
+  $("seleccionTexto").textContent = n ? plural(n, "seleccionado", "seleccionados") : "Ninguno seleccionado";
+  $("btnEliminarSel").disabled = n === 0;
+}
+
+/* ---------- Eliminación ---------- */
+function confirmarEliminacion(lista) {
+  const n = lista.length;
+  const masAntiguo = lista.map(x => x.registro).sort((a, b) => a.split("/").reverse().join("").localeCompare(b.split("/").reverse().join("")))[0];
+  const msg = n === 1
+    ? `Se eliminará definitivamente a ${lista[0].nombre} (${lista[0].idd}), registrado el ${lista[0].registro}. No tiene evaluaciones, jornadas, centros ni familiares. Esta acción no se puede deshacer. ¿Continuar?`
+    : `Se eliminarán definitivamente ${n} beneficiarios sin actividad (el registro más antiguo es del ${masAntiguo}). Esta acción no se puede deshacer. ¿Continuar?`;
+  confirmarAccion(msg, () => eliminar(lista.map(x => Number(x.id))));
+}
+
+async function eliminar(ids) {
+  try {
+    const r = await api("/api/huerfanos/eliminar", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pais: PAIS, persona_ids: ids }),
+    });
+    ids.forEach(i => seleccion.delete(String(i)));
+    let msg = `${r.eliminados === 1 ? "Se eliminó" : "Se eliminaron"} ${plural(r.eliminados, "beneficiario", "beneficiarios")}.`;
+    if (r.omitidos) msg += ` ${plural(r.omitidos, "no se eliminó porque ya tiene", "no se eliminaron porque ya tienen")} actividad.`;
+    mostrarToast(msg, r.omitidos ? "info" : "success");
+    await cargar();
+  } catch (e) { mostrarToast(e.message, "error"); }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  $("pais").addEventListener("change", function () { window.location.search = new URLSearchParams({ pais: this.value }).toString(); });
+  $("buscar").addEventListener("input", () => { clearTimeout(temporizador); temporizador = setTimeout(() => filtrar(true), 200); });
+  ["desde", "hasta", "orden"].forEach(id => $(id).addEventListener("change", () => filtrar(true)));
+  $("btnLimpiar").addEventListener("click", () => { $("buscar").value = ""; $("desde").value = ""; $("hasta").value = ""; $("orden").value = "reciente"; filtrar(true); });
+  $("btnActualizar").addEventListener("click", cargar);
+  $("btnAnterior").addEventListener("click", () => { pagina -= 1; renderTabla(); });
+  $("btnSiguiente").addEventListener("click", () => { pagina += 1; renderTabla(); });
+  $("chkPagina").addEventListener("change", function () {
+    const marcar = this.checked;          // se fija antes: actualizarSeleccion() reescribe esta casilla en cada vuelta
+    paginaActual().forEach(b => alternar(b, marcar));
+  });
+  $("btnEliminarSel").addEventListener("click", () => confirmarEliminacion([...seleccion.values()]));
+  cargar();
+});
+</script>
+{% endblock %}
