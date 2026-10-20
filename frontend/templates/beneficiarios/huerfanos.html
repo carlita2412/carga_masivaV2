@@ -170,14 +170,30 @@ function estado(icono, titulo, detalle) {
 }
 
 // Consulta pesada: solo al abrir, al actualizar y después de eliminar.
-async function cargar() {
+let edadSegundos = 0;      // antigüedad de la lista que devolvió el servidor
+let actualizando = false;  // el servidor la está recalculando en segundo plano
+let temporizadorRefresco = null;
+
+function textoEdad() {
+  const m = Math.floor(edadSegundos / 60);
+  const cuando = edadSegundos < 60 ? "hace instantes" : (m < 60 ? `hace ${m} min` : `hace ${Math.floor(m / 60)} h`);
+  return ` · Actualizado ${cuando}${actualizando ? " (actualizando…)" : ""}`;
+}
+
+// refrescar=true fuerza el recálculo (tarda unos segundos); silencioso=true no tapa la tabla con el aviso de carga.
+async function cargar(refrescar = false, silencioso = false) {
   const mio = ++solicitud;
-  estado("bi-hourglass-split", "Buscando beneficiarios sin actividad…", "Puede tardar unos segundos.");
-  $("tiles").innerHTML = ""; $("resumen").textContent = "";
+  clearTimeout(temporizadorRefresco);
+  if (!silencioso) {
+    estado("bi-hourglass-split", refrescar ? "Actualizando la lista…" : "Cargando…", refrescar ? "Se vuelve a revisar a todas las personas; puede tardar unos segundos." : "");
+    $("tiles").innerHTML = ""; $("resumen").textContent = "";
+  }
   try {
-    const d = await api(`/api/huerfanos?pais=${PAIS}`);
+    const d = await api(`/api/huerfanos?pais=${PAIS}&refrescar=${refrescar}`);
     if (mio !== solicitud) return;
-    todos = d.beneficiarios; truncado = d.truncado;
+    todos = d.beneficiarios; truncado = d.truncado; edadSegundos = d.edad_segundos; actualizando = d.actualizando;
+    // Si el servidor la está recalculando en segundo plano, se vuelve a pedir sola cuando ya debería estar lista.
+    if (actualizando) temporizadorRefresco = setTimeout(() => cargar(false, true), 9000);
     const existentes = new Set(todos.map(b => b.persona_id));
     [...seleccion.keys()].forEach(k => { if (!existentes.has(k)) seleccion.delete(k); });
     filtrar();
@@ -224,7 +240,7 @@ const paginaActual = () => vista.slice((pagina - 1) * POR_PAGINA, pagina * POR_P
 function renderTabla() {
   const totalPaginas = Math.max(Math.ceil(vista.length / POR_PAGINA), 1);
   pagina = Math.min(Math.max(pagina, 1), totalPaginas);
-  $("resumen").textContent = plural(vista.length, "beneficiario", "beneficiarios") + (truncado ? " · se muestran los primeros resultados" : "");
+  $("resumen").textContent = plural(vista.length, "beneficiario", "beneficiarios") + (truncado ? " · se muestran los primeros resultados" : "") + textoEdad();
   if (!vista.length) {
     return estado("bi-patch-check", todos.length ? "Ningún beneficiario coincide con los filtros" : "No hay beneficiarios sin actividad", todos.length ? "" : "Todos tienen jornadas, centros, evaluaciones o familiares.");
   }
@@ -316,7 +332,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("buscar").addEventListener("input", () => { clearTimeout(temporizador); temporizador = setTimeout(() => filtrar(true), 200); });
   ["desde", "hasta", "orden"].forEach(id => $(id).addEventListener("change", () => filtrar(true)));
   $("btnLimpiar").addEventListener("click", () => { $("buscar").value = ""; $("desde").value = ""; $("hasta").value = ""; $("orden").value = "reciente"; filtrar(true); });
-  $("btnActualizar").addEventListener("click", cargar);
+  $("btnActualizar").addEventListener("click", () => cargar(true));
   $("btnAnterior").addEventListener("click", () => { pagina -= 1; renderTabla(); });
   $("btnSiguiente").addEventListener("click", () => { pagina += 1; renderTabla(); });
   $("chkPagina").addEventListener("change", function () {

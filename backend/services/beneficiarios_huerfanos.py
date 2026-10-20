@@ -17,8 +17,15 @@ huérfanos en una sola consulta (son cientos) para que el navegador filtre y pag
 Igual que el resto de los servicios, recibe un cursor y NO hace commit/rollback.
 """
 
+import logging
+import threading
+import time
+
 MAX_LISTADO = 5000
 MAX_ELIMINAR = 200
+TTL_SEGUNDOS = 600          # pasado este tiempo, se sirve lo guardado y se recalcula en segundo plano
+
+logger = logging.getLogger("carga_masiva.api")
 
 
 class HuerfanosError(Exception):
@@ -49,16 +56,18 @@ def _fragmentos(cursor):
         joins.append(f"LEFT JOIN {tabla} {alias} ON {alias}.{columna} = p.persona_id")
         donde.append(f"{alias}.{columna} IS NULL")
 
-    # De mayor a menor poder de descarte: casi todos tienen jornada, y de los que no, la mayoría tiene evaluaciones.
+    # Orden por poder de descarte REAL (medido en Venezuela, 206 mil personas): la jornada descarta al 60 %, el
+    # centro a otro 36 %, y de las ~52 mil que quedan los familiares descartan al 99 % (quedan ~260). Las pesquisas
+    # casi no descartan a nadie en ese punto, así que van al final: probarlas antes costaba ~100 mil consultas inútiles.
     sin_filas("a", "psi_pacientes_x_jornada", "persona_id")
     sin_filas("b", "psi_pacientes_x_centros", "persona_id")
-    sin_filas("c", "psi_pesquisas_x_paciente", "persona_id")
-    sin_filas("d", "psi_pesquisas_x_centro", "persona_id")
     sin_filas("e", "psi_familiares", "persona_id_A")
     sin_filas("f", "psi_familiares", "persona_id_B")
     for alias, tabla in (("g", "psi_campo_evaluaciones"), ("h", "psi_campo_evaluaciones_centro")):
         if _tabla_existe(cursor, tabla):
             sin_filas(alias, tabla, "persona_id")
+    sin_filas("c", "psi_pesquisas_x_paciente", "persona_id")
+    sin_filas("d", "psi_pesquisas_x_centro", "persona_id")
     # persona_id_responsable no tiene índice: se materializa una vez en vez de recorrerla por cada persona.
     for tabla in ("psi_pacientes_x_jornada", "psi_pacientes_x_centros"):
         if _columna_existe(cursor, tabla, "persona_id_responsable"):
@@ -137,3 +146,94 @@ def eliminar(cursor, persona_ids: list) -> dict:
         "inexistentes": len(ids) - len(existentes),      # alguien los eliminó antes
         "ids_eliminados": validos,
     }
+
+
+# ---------------------------------------------------------------------------
+# Caché en memoria por país
+# ---------------------------------------------------------------------------
+# La búsqueda recorre a todas las personas (≈5 s en Venezuela) y casi nunca cambia el resultado, así que se guarda:
+#  * abrir la pantalla sirve lo guardado al instante;
+#  * si lo guardado tiene más de TTL_SEGUNDOS, se sirve igual y se recalcula en segundo plano (la próxima vez ya está);
+#  * «Actualizar» fuerza el recálculo y espera el resultado;
+#  * tras eliminar se quitan esos ids de lo guardado, sin recalcular;
+#  * al iniciar sesión se precalcula lo que falte (`precalentar`), para que la primera apertura tampoco espere.
+# La caché solo afecta a lo que se MUESTRA: `eliminar` siempre vuelve a comprobar contra la base de datos.
+# Es por proceso: con varios workers cada uno tendría la suya (no es un problema de corrección).
+
+_cache = {}                 # pais -> {"datos": {...}, "calculado": epoch}
+_candado = threading.Lock()
+_calculando = set()         # países que se están recalculando ahora mismo
+_candados_pais = {}         # un candado por país: evita dos cálculos simultáneos del mismo país
+
+
+def _candado_de(pais: str):
+    with _candado:
+        return _candados_pais.setdefault(pais, threading.Lock())
+
+
+def _calcular(pais: str, abrir_conexion) -> dict:
+    """Ejecuta la búsqueda y la guarda. Si otro hilo ya la estaba calculando, espera y reutiliza ese resultado."""
+    visto = _cache.get(pais, {}).get("calculado")
+    with _candado_de(pais):
+        reciente = _cache.get(pais)
+        if reciente and reciente["calculado"] != visto:       # otro hilo terminó mientras esperábamos
+            return reciente["datos"]
+        with _candado:
+            _calculando.add(pais)
+        conn = abrir_conexion(pais)
+        try:
+            datos = listar(conn.cursor())
+        finally:
+            conn.close()
+            with _candado:
+                _calculando.discard(pais)
+        with _candado:
+            _cache[pais] = {"datos": datos, "calculado": time.time()}
+        return datos
+
+
+def _en_segundo_plano(pais: str, abrir_conexion) -> None:
+    def tarea():
+        try:
+            _calcular(pais, abrir_conexion)
+        except Exception:
+            logger.exception("No se pudo recalcular la lista de beneficiarios sin actividad (%s)", pais)
+    threading.Thread(target=tarea, daemon=True, name=f"huerfanos-{pais}").start()
+
+
+def listar_con_cache(pais: str, abrir_conexion, refrescar: bool = False) -> dict:
+    """Lo mismo que `listar`, más cuándo se calculó (`edad_segundos`) y si se está recalculando (`actualizando`)."""
+    entrada = _cache.get(pais)
+    if entrada is None or refrescar:
+        datos = _calcular(pais, abrir_conexion)
+        return {**datos, "edad_segundos": 0, "actualizando": False, "desde_cache": False}
+    edad = int(time.time() - entrada["calculado"])
+    actualizando = pais in _calculando
+    if edad > TTL_SEGUNDOS and not actualizando:
+        _en_segundo_plano(pais, abrir_conexion)
+        actualizando = True
+    return {**entrada["datos"], "edad_segundos": edad, "actualizando": actualizando, "desde_cache": True}
+
+
+def quitar_de_cache(pais: str, persona_ids: list) -> None:
+    """Quita de lo guardado a los ya eliminados, para que la lista no los vuelva a mostrar."""
+    quitar = {str(i) for i in persona_ids}
+    with _candado:
+        entrada = _cache.get(pais)
+        if entrada:
+            entrada["datos"] = {**entrada["datos"], "beneficiarios": [b for b in entrada["datos"]["beneficiarios"] if b["persona_id"] not in quitar]}
+
+
+def precalentar(paises, abrir_conexion) -> None:
+    """Calcula en segundo plano, uno tras otro, los países que aún no tienen lista guardada o ya está vencida."""
+    pendientes = [p for p in paises if p not in _cache or time.time() - _cache[p]["calculado"] > TTL_SEGUNDOS]
+    if not pendientes:
+        return
+
+    def tarea():
+        for pais in pendientes:
+            try:
+                _calcular(pais, abrir_conexion)
+            except Exception:
+                logger.exception("No se pudo precalcular la lista de beneficiarios sin actividad (%s)", pais)
+    threading.Thread(target=tarea, daemon=True, name="huerfanos-precalentar").start()

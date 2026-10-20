@@ -266,6 +266,9 @@ async def login(request: Request, username: str = Form(...), password: str = For
 
         session_token = _crear_sesion(user_id, username)
 
+        # Deja lista en segundo plano la lista de «Sin actividad» (tarda unos segundos en calcularse); no bloquea el login.
+        huerfanos.precalentar(sorted(PAISES_VALIDOS), get_connection)
+
         response = RedirectResponse(url="/carga", status_code=302)
         response.set_cookie(
             key="session",
@@ -2472,22 +2475,20 @@ def beneficiarios_huerfanos(request: Request, pais: str = "vzla"):
 
 
 @app.get("/api/huerfanos")
-def api_huerfanos_listar(request: Request, pais: str):
+def api_huerfanos_listar(request: Request, pais: str, refrescar: bool = False):
     """Devuelve todos los huérfanos de una vez; la búsqueda, el rango de fechas, el orden y la paginación
-    los hace el navegador (la consulta pesada solo corre al abrir, al actualizar y tras eliminar)."""
+    los hace el navegador. La búsqueda recorre a todas las personas (≈5 s en Venezuela), así que el resultado
+    se guarda en memoria (ver `listar_con_cache`); `refrescar=true` fuerza el recálculo."""
     if not _usuario_autenticado(request):
         return _respuesta_no_autenticado()
     if pais not in PAISES_VALIDOS:
         return _error_json(400, "País no válido.")
 
-    conn = get_connection(pais)
     try:
-        return {"status": "ok", **huerfanos.listar(conn.cursor())}
+        return {"status": "ok", **huerfanos.listar_con_cache(pais, get_connection, refrescar)}
     except Exception:
         logger.exception("Error listando beneficiarios huérfanos")
         return _error_json(500, "No se pudo generar la lista.")
-    finally:
-        conn.close()
 
 
 class HuerfanosEliminarIn(BaseModel):
@@ -2507,6 +2508,7 @@ def api_huerfanos_eliminar(request: Request, datos: HuerfanosEliminarIn):
     try:
         resultado = huerfanos.eliminar(conn.cursor(), datos.persona_ids)
         conn.commit()
+        huerfanos.quitar_de_cache(datos.pais, resultado["ids_eliminados"])
         logger.info(
             "Beneficiarios huérfanos eliminados en %s: %s (ids=%s, omitidos=%s, usuario_id=%s)",
             datos.pais, resultado["eliminados"], resultado["ids_eliminados"], resultado["omitidos"], user_id
