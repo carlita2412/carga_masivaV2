@@ -26,6 +26,24 @@ load_dotenv()
 
 logger = logging.getLogger("carga_masiva.correo")
 
+# Log propio en logs/correo.log (rotativo). La app no configura logging global,
+# por eso sin esto los mensajes INFO se pierden y los errores solo salen por
+# stderr del servicio.
+if not logger.handlers:
+    try:
+        from logging.handlers import RotatingFileHandler
+        from pathlib import Path
+
+        _dir_logs = Path(__file__).resolve().parent.parent.parent / "logs"
+        _dir_logs.mkdir(exist_ok=True)
+        _h = RotatingFileHandler(_dir_logs / "correo.log", maxBytes=1_000_000,
+                                 backupCount=3, encoding="utf-8")
+        _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        logger.addHandler(_h)
+        logger.setLevel(logging.INFO)
+    except Exception:
+        pass
+
 DESTINATARIOS_POR_DEFECTO = "carla.noguera@digisalud.org,lorymar.guerra@digisalud.org"
 MAX_DETALLES = 50  # máximo de líneas de errores/duplicados listadas en el correo
 
@@ -136,6 +154,11 @@ def _a_dict(respuesta):
     return {"status": "error", "mensaje": "Respuesta no interpretable"}
 
 
+def _enviar_hilo(asunto, cuerpo):
+    logger.info("Enviando correo: %s", asunto)
+    _enviar(asunto, cuerpo)
+
+
 def notificar_carga(tipo):
     """Decorador para endpoints de carga: envía el resultado por correo."""
     def decorador(func):
@@ -151,7 +174,9 @@ def notificar_carga(tipo):
 
             respuesta = await func(*args, **kwargs)
 
-            if usuario:  # sin sesión (401) no es una carga real
+            if not usuario:  # sin sesión (401) no es una carga real
+                logger.info("Sin correo (%s): no hay sesión activa", tipo)
+            else:
                 try:
                     contexto = {
                         "Usuario": usuario,
@@ -163,7 +188,7 @@ def notificar_carga(tipo):
                     if kwargs.get("institucion_id") is not None:
                         contexto["Institución ID"] = kwargs["institucion_id"]
                     asunto, cuerpo = _construir_correo(tipo, contexto, _a_dict(respuesta))
-                    threading.Thread(target=_enviar, args=(asunto, cuerpo), daemon=True).start()
+                    threading.Thread(target=_enviar_hilo, args=(asunto, cuerpo), daemon=True).start()
                 except Exception:
                     logger.exception("Error preparando el correo de resultado")
             return respuesta

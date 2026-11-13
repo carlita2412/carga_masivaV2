@@ -18,3 +18,5 @@ sql/VE20260827.sql
 
 # Instrucciones locales de Claude Code
 CLAUDE.md
+
+logs/
