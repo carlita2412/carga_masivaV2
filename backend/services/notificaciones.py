@@ -77,14 +77,37 @@ def _fila(k, v):
             f"<td style='padding:4px 12px'>{html.escape(str(v))}</td></tr>")
 
 
-def _construir_correo(tipo, contexto, resultado):
+def _nombre_actividad(pais, actividad, destino_id):
+    """Nombre de la jornada/centro; si no se puede consultar, devuelve 'ID n'."""
+    try:
+        from backend.db.db_connection import get_connection
+        tabla, campo_id, campo_nombre = (
+            ("psi_jornadas", "jornada_id", "jornada_nombre") if actividad == "jornada"
+            else ("psi_centros", "centro_id", "centro_nombre")
+        )
+        conn = get_connection(pais)
+        try:
+            cur = conn.cursor()
+            cur.execute(f"SELECT {campo_nombre} FROM {tabla} WHERE {campo_id} = %s", (destino_id,))
+            fila = cur.fetchone()
+        finally:
+            conn.close()
+        if fila and fila[0]:
+            return str(fila[0]).strip()
+    except Exception:
+        logger.exception("No se pudo obtener el nombre de la %s %s", actividad, destino_id)
+    return f"ID {destino_id}"
+
+
+def _construir_correo(tipo, contexto, resultado, nombre_actividad=""):
     estado = str(resultado.get("status", "desconocido"))
     ok = estado == "ok"
     errores = resultado.get("errores") or []
     duplicados = resultado.get("duplicados") or []
     insertados = resultado.get("insertados")
 
-    asunto = f"[Carga masiva] {tipo}: {'EXITOSA' if ok else 'CON ERRORES'}"
+    sufijo = f" - {nombre_actividad}" if nombre_actividad else ""
+    asunto = f"[Carga masiva] {tipo}{sufijo}: {'EXITOSA' if ok else 'CON ERRORES'}"
 
     filas = [
         _fila("Tipo de carga", tipo),
@@ -154,9 +177,17 @@ def _a_dict(respuesta):
     return {"status": "error", "mensaje": "Respuesta no interpretable"}
 
 
-def _enviar_hilo(asunto, cuerpo):
-    logger.info("Enviando correo: %s", asunto)
-    _enviar(asunto, cuerpo)
+def _preparar_y_enviar(tipo, contexto, resultado, pais, actividad, destino_id):
+    """Corre en un hilo: consulta el nombre de la jornada/centro y envía."""
+    try:
+        nombre = _nombre_actividad(pais, actividad, destino_id)
+        contexto = dict(contexto)
+        contexto[str(actividad).capitalize()] = nombre
+        asunto, cuerpo = _construir_correo(tipo, contexto, resultado, nombre)
+        logger.info("Enviando correo: %s", asunto)
+        _enviar(asunto, cuerpo)
+    except Exception:
+        logger.exception("Error preparando el correo de resultado")
 
 
 def notificar_carga(tipo):
@@ -183,12 +214,16 @@ def notificar_carga(tipo):
                         "Archivo": nombre_archivo,
                         "País": kwargs.get("pais", ""),
                         "Actividad": kwargs.get("actividad", ""),
-                        "ID destino (jornada/centro)": kwargs.get("destino_id", ""),
                     }
                     if kwargs.get("institucion_id") is not None:
                         contexto["Institución ID"] = kwargs["institucion_id"]
-                    asunto, cuerpo = _construir_correo(tipo, contexto, _a_dict(respuesta))
-                    threading.Thread(target=_enviar_hilo, args=(asunto, cuerpo), daemon=True).start()
+                    threading.Thread(
+                        target=_preparar_y_enviar,
+                        args=(tipo, contexto, _a_dict(respuesta), kwargs.get("pais"),
+                              str(kwargs.get("actividad", "")).lower().strip(),
+                              kwargs.get("destino_id")),
+                        daemon=True,
+                    ).start()
                 except Exception:
                     logger.exception("Error preparando el correo de resultado")
             return respuesta
