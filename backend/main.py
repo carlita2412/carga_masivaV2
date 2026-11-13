@@ -27,6 +27,7 @@ from backend.services.carga_pesquisas import procesar_excel_pesquisa_antropometr
 from backend.services.carga_pesquisa_sanguineo import procesar_excel_pesquisa_sanguineo
 from backend.services.carga_pesquisa_sanguineo_avanzada import procesar_excel_pesquisa_sanguineo_avanzada
 from backend.services.carga_vitales import procesar_excel_vitales
+from backend.services.notificaciones import notificar_carga
 
 app = FastAPI(root_path="/carga_masiva")
 #app = FastAPI()
@@ -341,6 +342,7 @@ async def get_opciones(request: Request, pais: str = Query(...), actividad: str 
     return [{"id": r[0], "nombre": r[1], "institucion_id": r[2]} for r in rows]
 #carga beneficiarios endpoint
 @app.post("/api/cargar_excel")
+@notificar_carga("Beneficiarios")
 async def cargar_excel(
     request: Request,
     file: UploadFile = File(...),
@@ -712,6 +714,7 @@ def es_error_duplicado_mysql(exc: Exception) -> bool:
 
 
 @app.post("/api/cargar_excel_pesquisa_antropometrica")
+@notificar_carga("Pesquisa antropométrica")
 async def cargar_excel_pesquisa_antropometrica(
     request: Request,
     file: UploadFile = File(...),
@@ -865,6 +868,7 @@ async def cargar_excel_pesquisa_antropometrica(
 #CARGA PESQUISA SANGUINEO
 
 @app.post("/api/cargar_excel_pesquisa_sanguineo")
+@notificar_carga("Pesquisa sanguínea")
 async def cargar_excel_pesquisa_sanguineo(
     request: Request,
     file: UploadFile = File(...),
@@ -937,6 +941,7 @@ async def cargar_excel_pesquisa_sanguineo(
 #CARGA PESQUISA SANGUINEO AVANZADA
 
 @app.post("/api/cargar_excel_pesquisa_sanguineo_avanzada")
+@notificar_carga("Pesquisa sanguínea avanzada")
 async def cargar_excel_pesquisa_sanguineo_avanzada(
     request: Request,
     file: UploadFile = File(...),
@@ -1006,6 +1011,7 @@ async def cargar_excel_pesquisa_sanguineo_avanzada(
 #CARGA VITALES
 
 @app.post("/api/cargar_excel_vitales")
+@notificar_carga("Signos vitales")
 async def cargar_excel_vitales(
     request: Request,
     file: UploadFile = File(...),
